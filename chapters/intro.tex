@@ -1,8 +1,130 @@
 \chapter{Introduction}
 \label{chap:Introduction}
 
-Example citation \autocite{lamport_time_1978}.
-
 \section{Motivation}
 \label{sec:Motivation}
+
+Large language models have become competent at agentic tasks, in which the model
+plans over multiple turns, issues calls to external tools, and conditions its
+subsequent behaviour on the results those tools return. The models that perform best
+in this setting are large, expensive to serve, and in most cases proprietary. A
+practitioner who needs an agent to run at low latency, at high request volume, on
+private infrastructure, or under a fixed inference budget cannot in general deploy
+the model that performs the task best. The practical question is therefore how to
+transfer agentic competence from a large teacher model into a small student model
+that can be deployed under those constraints.
+
+Supervised fine-tuning on teacher demonstrations is the standard answer, and it is
+insufficient for agentic tasks in a specific and well-understood way. A student
+trained on the teacher's trajectories is optimized only on the states the teacher
+visits. At inference time the student visits its own states, and any deviation
+compounds: an agent that issues a malformed tool call in its third turn spends the
+remainder of the episode in a region of the state space its training data never
+covered. On-policy distillation (OPD) addresses this by training the student on its
+own rollouts and having the teacher supply correction on the states the student
+actually reaches \autocite{lu_thinkingmachines_opd_2025}. This makes the supervision
+signal dense and situated, and OPD has consequently been adopted as a distinct stage
+of post-training rather than as a variant of supervised fine-tuning
+\autocite{xu_mopd_notion_2025}.
+
+Standard OPD carries two assumptions that are difficult to satisfy in exactly the
+case that motivates the problem. The first is white-box access. Per-token correction
+requires the teacher's logits, which the strongest available teachers do not expose,
+and comparing distributions across model families additionally requires reconciling
+different tokenizers, a problem with its own substantial literature and its own
+irreducible sources of error \autocite{boizard_uld_2025,minixhofer_alm_2025,phan_tokenization_bias_2025}.
+The second assumption concerns granularity. OPD is standardly applied as one
+supervision signal over a complete generation, which is adequate for a single
+continuous chain of thought but poorly matched to a trajectory composed of discrete,
+causally dependent steps.
+
+Existing work relaxes these assumptions separately. Rubric-based On-Policy
+Distillation obtains supervision from teacher text alone, using an induced rubric and
+a blind verifier in place of logit comparison, and reports strong cross-architecture
+results without any tokenizer alignment \autocite{fang_ropd_2026}. Its reward is
+nevertheless a single scalar computed once the response is complete. On-Policy
+Agentic Distillation, introduced as a component of MAD-OPD, supplies supervision at
+the level of individual agentic steps and demonstrates that doing so stabilises
+training against error compounding, but obtains that supervision from teacher logits
+under a shared vocabulary \autocite{wang_madopd_2026}. OmniOPD operates below
+trajectory granularity without logit access, but defines its unit of supervision as
+an entropy-selected token span inside a continuous chain of thought, and is evaluated
+on single-turn reasoning alone \autocite{zhou_omniopd_2026}.
+
+The combination that the deployment case requires, namely black-box teacher access
+together with step-level credit assignment over multi-turn tool-use trajectories, has
+not been demonstrated. A practitioner distilling from a proprietary teacher into a
+small agent currently chooses between supervision that is dense but unavailable and
+supervision that is available but sparse. This thesis addresses that combination.
+
+\section{Problem Statement}
+\label{sec:Problem Statement}
+
+Let $\pi_\theta$ denote a student policy and let $\mathcal{T}$ denote a teacher
+accessible only as a sampling oracle: given a prompt, $\mathcal{T}$ returns generated
+text, and neither its logits, its vocabulary, nor its tokenizer are observable. An
+agentic rollout from $\pi_\theta$ produces a trajectory
+$\tau = (s_0, a_0, o_0, s_1, a_1, o_1, \dots, s_T, a_T)$, in which $a_t$ is a
+model-generated action, typically a tool call together with its accompanying
+reasoning, and $o_t$ is the observation returned by the environment. Trajectory-level
+black-box supervision assigns a single scalar $r(\tau)$ once the episode terminates.
+The credit-assignment problem is that this scalar is uninformative about which $a_t$
+was responsible for the outcome, and the number of candidate explanations grows with
+$T$.
+
+This thesis asks whether the rubric-based, blind-verifier mechanism that produces
+$r(\tau)$ can instead be applied per step to produce a sequence $r(a_t \mid s_t)$
+under the same black-box access constraint, and whether training on that denser signal
+improves agentic task performance over the trajectory-level baseline. Three questions
+follow. First, what constitutes an appropriate unit of supervision in an agentic
+trajectory, and how should rubric criteria be induced for a partial rollout whose
+eventual outcome is unknown at the time of scoring. Second, whether per-step scoring
+introduces failure modes absent at trajectory level, in particular whether rubric
+gaming, which the trajectory-level method observes in fewer than 2\% of early-training
+rollouts, becomes more prevalent when criteria are local. Third, what the method costs,
+given that trajectory-level rubric induction already requires two teacher calls per
+rollout and per-step induction multiplies that cost by trajectory length unless the
+induction procedure is amortised.
+
+\section{Objectives and Scope}
+\label{sec:Objectives}
+
+The objectives of this project are as follows.
+
+\begin{enumerate}[itemsep=2pt,topsep=4pt]
+  \item Formalise step-level, black-box supervision for multi-turn agentic
+    trajectories, including a defensible definition of the step boundary and a
+    procedure for inducing per-step rubric criteria from teacher text.
+  \item Implement the resulting method, integrating the per-step reward signal into
+    a GRPO training loop.
+  \item Evaluate against two baselines on agentic tool-use benchmarks: supervised
+    fine-tuning on teacher trajectories, and trajectory-level black-box supervision
+    in the manner of ROPD.
+  \item Characterise the cost of the method in teacher calls per training step, and
+    quantify the trade-off between supervision density and teacher query budget.
+  \item Analyse failure modes introduced by per-step scoring, with particular
+    attention to rubric gaming and to the effect of scoring steps whose contribution
+    to the outcome is not yet determined.
+\end{enumerate}
+
+Three directions lie outside the scope of this project. The first is multi-teacher
+debate. Translating the ceiling-breaking mechanism of MAD-OPD into black-box space is
+a natural continuation of this work and is discussed in
+Chapter~\ref{chap:Conclusion}, but a single-teacher method must be established before
+a multi-teacher one can be evaluated against it. The second is cross-tokenizer logit
+alignment. The method proposed here requires no tokenizer correspondence, and the
+cross-tokenizer literature is surveyed in Chapter~\ref{chap:Preliminaries} as context
+rather than as a component. The third is the training of new base models. All
+experiments fine-tune existing open-weight student models.
+
+\section{Organisation of this Report}
+\label{sec:Organisation}
+
+Chapter~\ref{chap:Preliminaries} defines the terminology used throughout, surveys the
+relevant literature, and states the contributions of this work.
+Chapter~\ref{chap:Implementation} describes the design of the proposed method and its
+implementation. Chapter~\ref{chap:Evaluation} presents the experimental setup and
+results. Chapter~\ref{chap:Challenges} discusses the difficulties encountered during
+the project. Chapter~\ref{chap:Conclusion} summarises the findings and identifies
+directions for future work.
 

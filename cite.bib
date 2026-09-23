@@ -1,17 +1,251 @@
-@article{lamport_time_1978,
-	title = {Time, clocks, and the ordering of events in a distributed system},
-	volume = {21},
-	issn = {0001-0782},
-	url = {https://dl.acm.org/doi/10.1145/359545.359563},
-	doi = {10.1145/359545.359563},
-	abstract = {The concept of one event happening before another in a distributed system is examined, and is shown to define a partial ordering of the events. A distributed algorithm is given for synchronizing a system of logical clocks which can be used to totally order the events. The use of the total ordering is illustrated with a method for solving synchronization problems. The algorithm is then specialized for synchronizing physical clocks, and a bound is derived on how far out of synchrony the clocks can become.},
-	pages = {558--565},
-	number = {7},
-	journaltitle = {Communications of the {ACM}},
-	shortjournal = {Commun. {ACM}},
-	author = {Lamport, Leslie},
-	urldate = {2024-04-03},
-	date = {1978-07-01},
-	keywords = {clock synchronization, computer networks, distributed systems, multiprocess systems},
-	file = {Full Text PDF:C\:\\Users\\zhyda\\Zotero\\storage\\SPVLSNWI\\Lamport - 1978 - Time, clocks, and the ordering of events in a dist.pdf:application/pdf},
+% =====================================================================
+% Additions to cite.bib for the Literature Review.
+%
+% Entries preceded by a "% CHECK" line were reconstructed from secondary
+% citations rather than from the primary source, and should be verified
+% against the arXiv listing page before submission. Author order and
+% venue are the fields most likely to need correction. Entries with no
+% author field require one to be supplied; biblatex's apa style will
+% otherwise fall back to a title-first rendering.
+% =====================================================================
+
+
+% --- Post-training foundations ---------------------------------------
+
+@inproceedings{ouyang_instructgpt_2022,
+	title = {Training language models to follow instructions with human feedback},
+	author = {Ouyang, Long and Wu, Jeff and Jiang, Xu and Almeida, Diogo and Wainwright, Carroll L. and Mishkin, Pamela and Zhang, Chong and Agarwal, Sandhini and Slama, Katarina and Ray, Alex and Schulman, John and Hilton, Jacob and Kelton, Fraser and Miller, Luke and Simens, Maddie and Askell, Amanda and Welinder, Peter and Christiano, Paul and Leike, Jan and Lowe, Ryan},
+	booktitle = {Advances in Neural Information Processing Systems},
+	volume = {35},
+	pages = {27730--27744},
+	date = {2022},
+	eprint = {2203.02155},
+	eprinttype = {arXiv},
+}
+
+@inproceedings{rafailov_dpo_2023,
+	title = {Direct Preference Optimization: Your Language Model is Secretly a Reward Model},
+	author = {Rafailov, Rafael and Sharma, Archit and Mitchell, Eric and Ermon, Stefano and Manning, Christopher D. and Finn, Chelsea},
+	booktitle = {Advances in Neural Information Processing Systems},
+	volume = {36},
+	date = {2023},
+	eprint = {2305.18290},
+	eprinttype = {arXiv},
+}
+
+@article{deepseekai_r1_2025,
+	title = {{DeepSeek-R1}: Incentivizing Reasoning Capability in {LLMs} via Reinforcement Learning},
+	author = {Guo, Daya and Yang, Dejian and Zhang, Haowei and Song, Junxiao and Zhang, Ruoyu and Xu, Runxin and Zhu, Qihao and Ma, Shirong and Wang, Peiyi and Bi, Xiao},
+	journaltitle = {arXiv preprint arXiv:2501.12948},
+	date = {2025},
+	eprint = {2501.12948},
+	eprinttype = {arXiv},
+}
+
+@article{shao_deepseekmath_grpo_2024,
+	title = {{DeepSeekMath}: Pushing the Limits of Mathematical Reasoning in Open Language Models},
+	author = {Shao, Zhihong and Wang, Peiyi and Zhu, Qihao and Xu, Runxin and Song, Junxiao and Bi, Xiao and Zhang, Haowei and Zhang, Mingchuan and Li, Y. K. and Wu, Y. and Guo, Daya},
+	journaltitle = {arXiv preprint arXiv:2402.03300},
+	date = {2024},
+	eprint = {2402.03300},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- verify author list and exact title against arXiv:2503.09516
+@article{agentic_rl_tooluse_2025a,
+	title = {Agentic Reasoning and Tool Integration for {LLMs} via Reinforcement Learning},
+	author = {Singh, Joykirat and Magazine, Raghav and Pandya, Yash and Nambi, Akshay},
+	journaltitle = {arXiv preprint arXiv:2503.09516},
+	date = {2025},
+	eprint = {2503.09516},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- title and authors not confirmed; supply from arXiv:2506.15841
+@article{agentic_rl_tooluse_2025b,
+	title = {Agentic Reinforcement Learning for Search- and Tool-Augmented Language Models},
+	journaltitle = {arXiv preprint arXiv:2506.15841},
+	date = {2025},
+	eprint = {2506.15841},
+	eprinttype = {arXiv},
+}
+
+
+% --- On-policy distillation ------------------------------------------
+
+@online{lu_thinkingmachines_opd_2025,
+	title = {On-Policy Distillation},
+	author = {Lu, Kevin},
+	organization = {Thinking Machines Lab: Connectionism},
+	date = {2025-10-26},
+	doi = {10.64434/tml.20251026},
+	url = {https://thinkingmachines.ai/blog/on-policy-distillation},
+	urldate = {2026-08-30},
+}
+
+% CHECK -- supply the canonical URL and publication date
+@online{xu_mopd_notion_2025,
+	title = {Multi-Teacher On-Policy Distillation as a Post-Training Primitive},
+	author = {Xu, Yumo},
+	date = {2025},
+}
+
+% CHECK -- supply the post URL and date
+@online{brown_opd_ceiling_2025,
+	title = {On the Teacher Capability Ceiling in On-Policy Distillation},
+	author = {Brown, Will},
+	organization = {X},
+	date = {2025},
+}
+
+
+% --- Cross-tokenizer distillation ------------------------------------
+
+@article{boizard_uld_2025,
+	title = {Towards Cross-Tokenizer Distillation: the Universal Logit Distillation Loss for {LLMs}},
+	author = {Boizard, Nicolas and El Haddad, Kevin and Hudelot, C{\'e}line and Colombo, Pierre},
+	journaltitle = {Transactions on Machine Learning Research},
+	date = {2025},
+	eprint = {2402.12030},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- confirm full author list
+@inproceedings{zhang_dskd_2024,
+	title = {Dual-Space Knowledge Distillation for Large Language Models},
+	author = {Zhang, Songming and Zhang, Xue and Sun, Zengkui and Chen, Yufeng and Xu, Jinan},
+	booktitle = {Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing},
+	date = {2024},
+}
+
+% CHECK -- confirm full author list and venue
+@article{wan_mined_2024,
+	title = {Knowledge Fusion of Large Language Models},
+	author = {Wan, Fanqi and Huang, Xinting and Cai, Deng and Quan, Xiaojun and Bi, Wei and Shi, Shuming},
+	journaltitle = {arXiv preprint},
+	date = {2024},
+}
+
+@inproceedings{minixhofer_alm_2025,
+	title = {Approximate Likelihood Matching for Cross-Tokenizer Distillation},
+	author = {Minixhofer, Benjamin and Vuli{\'c}, Ivan and Ponti, Edoardo Maria},
+	booktitle = {Advances in Neural Information Processing Systems},
+	date = {2025},
+	eprint = {2503.20083},
+	eprinttype = {arXiv},
+}
+
+@online{patino_gold_2025,
+	title = {Unlocking On-Policy Distillation for Any Model Family},
+	author = {Pati{\~n}o, Carlos Miguel and Rasul, Kashif and Gallou{\'e}dec, Quentin and Burtenshaw, Ben and Paniego, Sergio and Srivastav, Vaibhav and Frere, Thibaud and Beeching, Ed and Tunstall, Lewis and von Werra, Leandro and Wolf, Thomas},
+	organization = {Hugging Face},
+	date = {2025-10},
+	url = {https://huggingface.co/spaces/HuggingFaceH4/on-policy-distillation},
+	urldate = {2026-08-30},
+	note = {Implemented as \texttt{GOLDTrainer} in TRL},
+}
+
+% CHECK -- confirm title and authors against arXiv:2605.07711
+@article{sun_simct_2026,
+	title = {{SimCT}: On Silent Supervision Loss at Misaligned Token Boundaries},
+	author = {Sun, Jie},
+	journaltitle = {arXiv preprint arXiv:2605.07711},
+	date = {2026},
+	eprint = {2605.07711},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- supply authors and confirm title against arXiv:2607.22334
+@article{byte_prefix_marginalization_2026,
+	title = {Byte-Prefix Marginalization for Cross-Tokenizer Distillation},
+	journaltitle = {arXiv preprint arXiv:2607.22334},
+	date = {2026},
+	eprint = {2607.22334},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- supply authors and confirm title against arXiv:2512.14954
+@article{cross_tokenizer_likelihood_scoring_2025,
+	title = {Cross-Tokenizer Likelihood Scoring},
+	journaltitle = {arXiv preprint arXiv:2512.14954},
+	date = {2025},
+	eprint = {2512.14954},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- supply authors and confirm title against arXiv:2412.14528
+@article{multi_level_ot_2024,
+	title = {Multi-Level Optimal Transport for Cross-Tokenizer Knowledge Distillation},
+	journaltitle = {arXiv preprint arXiv:2412.14528},
+	date = {2024},
+	eprint = {2412.14528},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- supply authors and confirm title against arXiv:2604.07466
+@article{byte_level_interface_2026,
+	title = {A Byte-Level Interface for Cross-Tokenizer Distillation},
+	journaltitle = {arXiv preprint arXiv:2604.07466},
+	date = {2026},
+	eprint = {2604.07466},
+	eprinttype = {arXiv},
+}
+
+% CHECK -- confirm full author list
+@inproceedings{chen_ctkd_2025,
+	title = {{CTKD}: Cross-Tokenizer Knowledge Distillation},
+	author = {Chen, Wei},
+	booktitle = {Findings of the Association for Computational Linguistics: ACL 2025},
+	date = {2025},
+}
+
+@inproceedings{phan_tokenization_bias_2025,
+	title = {Exact Byte-Level Probabilities from Tokenized Language Models for {FIM}-Tasks and Model Ensembles},
+	author = {Phan, Buu and Amos, Brandon and Gat, Itai and Havasi, Marton and Muckley, Matthew and Ullrich, Karen},
+	booktitle = {International Conference on Learning Representations},
+	date = {2025},
+	eprint = {2410.09303},
+	eprinttype = {arXiv},
+}
+
+
+% --- Black-box on-policy distillation --------------------------------
+
+@article{ye_gad_2025,
+	title = {Black-Box On-Policy Distillation of Large Language Models},
+	author = {Ye, Tianzhu and Dong, Li and Chi, Zewen and Wu, Xun and Huang, Shaohan and Wei, Furu},
+	journaltitle = {arXiv preprint arXiv:2511.10643},
+	date = {2025-11},
+	eprint = {2511.10643},
+	eprinttype = {arXiv},
+}
+
+@article{fang_ropd_2026,
+	title = {Rubric-based On-policy Distillation},
+	author = {Fang, Junfeng and Hong, Zhepei and Zheng, Mao and Song, Mingyang and Li, Gengsheng and Jiang, Houcheng and Zhang, Dan and Guo, Haiyun and Wang, Xiang and Chua, Tat-Seng},
+	journaltitle = {arXiv preprint arXiv:2605.07396},
+	date = {2026-05},
+	eprint = {2605.07396},
+	eprinttype = {arXiv},
+}
+
+@article{zhou_omniopd_2026,
+	title = {{OmniOPD}: Logit-Free On-Policy Distillation via Speculative Verification},
+	author = {Zhou, Yuhang and Zhang, Lizhu and Wu, Yifan and Wang, Mingyi and Bo, Peng and Liu, Jiayi and Fan, Xiangjun and Zhao, Zhuokai},
+	journaltitle = {arXiv preprint arXiv:2606.01476},
+	date = {2026-06},
+	eprint = {2606.01476},
+	eprinttype = {arXiv},
+}
+
+
+% --- Multi-teacher distillation --------------------------------------
+
+@article{wang_madopd_2026,
+	title = {{MAD-OPD}: Breaking the Ceiling in On-Policy Distillation via Multi-Agent Debate},
+	author = {Wang, Jianze and Liu, Ying and Chen, Jinlong and Hu, Xuchun and Zhang, Qilong and Cao, Yu and Wang, Jun and Yang, Hua and Xie, Yong and Chen, Qianglong},
+	journaltitle = {arXiv preprint arXiv:2605.01347},
+	date = {2026-05},
+	eprint = {2605.01347},
+	eprinttype = {arXiv},
 }
