@@ -86,7 +86,7 @@ Trajectory-level supervision leaves credit assignment entirely to the optimiser,
 A rubric is a finite set of weighted criteria $C = \{c_k\}_{k=1}^{K}$, where each item $c_k = (\rho_k, w_k)$ consists of a textual criterion $\rho_k$ and an importance weight $w_k > 0$. Each criterion must be decidable as satisfied or not satisfied for a single response in isolation.
 \end{Definitions}
  
-In Rubric-based On-Policy Distillation (ROPD) \cite{fang2026ropd}, rubrics are produced and applied by two components, both of which may be instantiated by the teacher itself.
+In Rubric-based On-Policy Distillation (ROPD) \autocite{fang_ropd_2026}, rubrics are produced and applied by two components, both of which may be instantiated by the teacher itself.
  
 \begin{Definitions}[Rubricator]
 Given a prompt $x$, a set of $m$ teacher responses $Y^{\mathcal{T}}_x = \{y^{\mathcal{T}}_j\}_{j=1}^{m}$ and a set of $n$ student rollouts $Y^{S}_x = \{y^{S}_i\}_{i=1}^{n}$, a Rubricator $\mathcal{R}$ induces a rubric from the contrast between the two sets,
@@ -111,7 +111,7 @@ Rubric gaming is the attainment of a high weighted pass rate by a response that 
  
 \subsection{Group Relative Policy Optimization}
  
-Group Relative Policy Optimization (GRPO) \cite{shao2024deepseekmath} is the policy optimisation algorithm through which all rewards in this report are applied.
+Group Relative Policy Optimization (GRPO) \autocite{shao_deepseekmath_grpo_2024} is the policy optimisation algorithm through which all rewards in this report are applied.
  
 \begin{Definitions}[Group-relative advantage]
 For a prompt $x$, GRPO samples a group of $n$ rollouts $\{y_i\}_{i=1}^{n}$ from the current policy $\pi_{\theta_{\mathrm{old}}}$ and obtains rewards $\{r_i\}_{i=1}^{n}$. The advantage of rollout $i$ is
