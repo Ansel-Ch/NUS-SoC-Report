@@ -833,18 +833,17 @@ round took a median of about 10 seconds on Countdown and 14 seconds on MATH.
 
 \section{Data Boundaries}
 \label{imp:sec:Boundaries}
+\label{imp:sec:groundtruth}
 
-The harness enforces the access constraints of the problem statement. Providers receive
-prompts and return text, and never receive student parameters, gradients or rollouts.
-The student never receives provider parameters or logits. Prompts are visible to the
-provider that answers them, so the setting does not protect the privacy of the student's
-prompts. Mechanisms that would, such as differentially private prompt generation
-\autocite{hong_dpopt_2024}, are outside the scope of this thesis.
+The harness enforces the access constraints stated in Section~\ref{sec:Problem Statement}.
+Providers receive prompts and return text, and never receive student parameters,
+gradients or rollouts. The student never receives provider parameters or logits. Prompts
+are visible to the provider that answers them, so the setting does not protect the
+privacy of the student's prompts. Mechanisms that would, such as differentially private
+prompt generation \autocite{hong_dpopt_2024}, are outside the scope of this thesis.
 
-Ground-truth answers are withheld from the update, so that the student learns only from
-providers, which is the premise of distillation.
-\label{imp:sec:groundtruth}Labels enter a run in exactly three
-places: the evaluations on the selection set, the correctness reward of the
+The update never sees ground-truth answers, so the student learns only from providers,
+which is the premise of distillation. Labels enter a run in exactly three places: the evaluations on the selection set, the correctness reward of the
 provider-free baseline, and diagnostic quantities written to the log, such as the
 student's accuracy on the pool and the reward given to correct and wrong responses
 ($q$ and $\varepsilon$). No decision made during a run reads the diagnostics.
