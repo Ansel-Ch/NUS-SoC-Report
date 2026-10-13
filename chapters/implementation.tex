@@ -1,25 +1,299 @@
 \chapter{Implementation}
 \label{chap:Implementation}
 
+% Placeholder marker for values not yet fixed. Renders as red [TBD: ...].
+% Remove once every placeholder in Chapters 3 and 4 is filled.
+\providecommand{\TBD}[1][]{\textcolor{red}{[TBD\if\relax\detokenize{#1}\relax\else: #1\fi]}}
+
+This chapter describes the testbed in which provider-selective on-policy distillation
+is studied and the selection policies evaluated in Chapter~\ref{chap:Evaluation}.
+Section~\ref{imp:sec:Design Overview} gives the overall training loop.
+Sections~\ref{imp:sec:Testbed} and~\ref{imp:sec:Update} describe the student,
+providers, tasks and update rules. Section~\ref{imp:sec:Marginal} describes how
+marginal value is measured, and Sections~\ref{imp:sec:Selectors}
+and~\ref{imp:sec:Rewards} describe the selectors and their reward signals.
+
 \section{Design Overview}
 \label{imp:sec:Design Overview}
 
+Training alternates between selection and update, as shown in
+Figure~\ref{imp:fig:loop} and Algorithm~\ref{imp:alg:loop}. At each round the selector
+observes a summary of the student's state and chooses an arm $(k, d)$. A batch of
+prompts from domain $d$ is sent to provider $M_k$, the student is updated on its own
+rollouts using the provider's responses, the cost is charged against the budget, and
+the selector receives a reward. Every component that the hypotheses vary is a
+replaceable module: the selector, the update rule and the selection reward.
+
 \begin{figure}[H]
-    \begin{center}
-\begin{lstlisting}[language=Java]
-public class HelloWorld {
-    public static void main(String[] args) {
-        // Prints "Hello, World!" to the terminal window.
-        System.out.println("Hello, World!");
-    }
-}
-\end{lstlisting}
-    \end{center}
-    \caption{Hello World in Java}\label{imp:fig:HelloWorldJava}
+\centering
+% Uses absolute coordinates so that no TikZ library beyond the preamble's is needed.
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners, align=center, minimum width=27mm,
+                minimum height=10mm, font=\small},
+    arr/.style={-{Stealth}, thick}
+  ]
+  \node[box] (sel)  at (0, 0)    {Selector\\$\pi_{\mathrm{sel}}$};
+  \node[box] (prov) at (5.3, 0)    {Provider $M_k$\\(black-box)};
+  \node[box] (upd)  at (10.6, 0)   {Update\\(black-box OPD)};
+  \node[box] (stu)  at (10.6, -2.6) {Student\\$\pi_\theta$};
+  \node[box] (eval) at (0, -2.6)  {State summary\\$s_t = \phi(\theta)$};
+  \draw[arr] (sel) -- node[above, font=\scriptsize]{$a_t=(k,d)$} node[below, font=\scriptsize]{prompts} (prov);
+  \draw[arr] (prov) -- node[above, font=\scriptsize]{text only} (upd);
+  \draw[arr] (upd) -- node[right, font=\scriptsize]{$\theta_{t-1}\!\to\!\theta_t$} (stu);
+  \draw[arr] (stu) -- node[below, font=\scriptsize]{selection set} (eval);
+  \draw[arr] (eval) -- node[left, font=\scriptsize]{$s_t$, $r_t$} (sel);
+  \draw[arr, dashed] (stu.north west) -- node[above left, font=\scriptsize,
+    pos=0.6]{rollouts} (upd.south west);
+\end{tikzpicture}
+\caption{The provider-selective training loop. Only prompts and generated text cross
+the boundary between the student's side and a provider.}
+\label{imp:fig:loop}
 \end{figure}
+
+\begin{algorithm}[H]
+\caption{Provider-selective on-policy distillation}
+\label{imp:alg:loop}
+\begin{algorithmic}[1]
+\Require student $\pi_{\theta_0}$, providers $\{M_k, c_k\}_{k=1}^{K}$, domains
+  $\{\mathcal{X}_d\}_{d=1}^{D}$, budget $B$, batch size $b$, selector $\pi_{\mathrm{sel}}$
+\State $\textit{spent} \gets 0$, $t \gets 0$, $s_0 \gets \phi(\theta_0)$
+\While{$\textit{spent} + b \min_k c_k \le B$}
+  \State $t \gets t + 1$
+  \State $(k_t, d_t) \gets \pi_{\mathrm{sel}}(s_{t-1}, \text{history})$, restricted to
+    arms with $\textit{spent} + b\,c_{k} \le B$
+  \State draw $x_1, \dots, x_b \sim \mathcal{X}_{d_t}$; obtain references
+    $Y^{(k_t)}_{x_i} \sim M_{k_t}(\cdot \mid x_i)$
+  \State $\theta_t \gets \operatorname{Update}\big(\theta_{t-1},
+    \{(x_i, Y^{(k_t)}_{x_i})\}_{i=1}^{b}\big)$
+    \Comment{Section~\ref{imp:sec:Update}}
+  \State $\textit{spent} \gets \textit{spent} + b\,c_{k_t}$
+  \State $s_t \gets \phi(\theta_t)$; $r_t \gets \operatorname{Reward}(\theta_{t-1}, \theta_t)$
+    \Comment{Section~\ref{imp:sec:Rewards}}
+  \State update $\pi_{\mathrm{sel}}$ with $(s_{t-1}, (k_t, d_t), r_t, b\,c_{k_t})$
+\EndWhile
+\State \Return $\theta_t$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Testbed}
+\label{imp:sec:Testbed}
+
+\subsection{Tasks and domains}
+
+All tasks are single-turn with answers that can be checked by a program, so that
+utility on the selection and test sets can be computed without a learned judge. Each
+domain is split into a training prompt pool $\mathcal{X}_d$, a selection set used
+only for selection rewards and checkpointing, and a test set used only for the
+results reported in Chapter~\ref{chap:Evaluation}. The three splits are disjoint.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|r|r|r|l|}
+\hline
+\textbf{Domain} & \textbf{Source} & \textbf{Pool} & \textbf{Select.} & \textbf{Test}
+  & \textbf{Checker} \\
+\hline
+Arithmetic search & Countdown & \TBD & \TBD & \TBD & exact evaluation \\
+Math word problems & \TBD[e.g.\ GSM8K] & \TBD & \TBD & \TBD & numeric match \\
+Code & \TBD[e.g.\ MBPP] & \TBD & \TBD & \TBD & unit tests \\
+\hline
+\end{tabular}
+\caption{Domains, split sizes and answer checkers.}
+\label{imp:tab:domains}
+\end{table}
+
+Countdown is retained from the motivating experiment of
+Section~\ref{eval:sec:Motivating}, so that the student and verifier pipeline is shared.
+\TBD[confirm the second and third domains; they should be ones on which the candidate
+providers differ in accuracy, or H1 cannot hold by construction]
+
+\subsection{Student}
+
+The student is \TBD[e.g.\ Qwen2.5-1.5B-Instruct], trained with LoRA adapters of rank
+\TBD. A student of this size is chosen because the learnability gap reported for
+models of 3B parameters or fewer \autocite{li_learnability_gap_2025} is the regime in
+which the strongest provider is least likely to be the most useful one.
+
+\subsection{Providers}
+
+Providers are open-weight models served locally and accessed only through a text
+interface, so that black-box access is enforced by the harness rather than assumed.
+Table~\ref{imp:tab:providers} lists the provider pool. Prices are set in proportion to
+\TBD[active parameter count, or the public API price of a comparable model], so that
+the strongest provider is also the most expensive.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|l|l|l|r|}
+\hline
+$k$ & \textbf{Model} & \textbf{Role} & \textbf{Family} & \textbf{Price $c_k$} \\
+\hline
+1 & \TBD & strong generalist & \TBD & \TBD \\
+2 & \TBD & math specialist & \TBD & \TBD \\
+3 & \TBD & code specialist & \TBD & \TBD \\
+4 & \TBD & small, cheap generalist & \TBD & \TBD \\
+5 & copy of provider \TBD & degraded & -- & same as source \\
+\hline
+\end{tabular}
+\caption{Provider pool. At least two families are included so that providers and
+student do not all share a tokenizer.}
+\label{imp:tab:providers}
+\end{table}
+
+The degraded provider is a copy of one of the other providers whose responses are
+corrupted with probability \TBD[$p$], for instance by perturbing the final answer. It
+carries the same price as its source, so a selector that cannot detect the
+corruption has no reason to avoid it.
+
+\subsection{Response cache}
+
+For every prompt $x$ in every pool and every provider $M_k$, $m$ responses are
+generated once and cached. A query in Algorithm~\ref{imp:alg:loop} reads from the
+cache and is charged at the provider's price as if it were issued live. Caching makes
+runs reproducible, makes the greedy oracle and the marginal-value measurements of
+Section~\ref{imp:sec:Marginal} affordable, and does not compromise the on-policy
+property of the update, because provider responses depend only on the prompt and not
+on the student's rollouts (Section~\ref{imp:sec:Update}).
+
+\section{Update Rules}
+\label{imp:sec:Update}
+
+Two update rules are implemented, and every selector is run under both.
+
+\paragraph{Off-policy baseline (SFT).} The student is fine-tuned on the provider's
+cached responses for the batch, $\mathcal{L}_{\mathrm{SFT}}$ of
+Section~\ref{sec:Definitions}. Responses are not filtered by correctness, so that
+provider quality, including that of the degraded provider, reaches the student.
+
+\paragraph{Black-box on-policy distillation.} For each prompt $x_i$ in the batch, the
+student samples $n$ rollouts. Each rollout is scored by a reward that depends on the
+provider's $m$ cached references and not on the ground-truth answer, and the student
+is updated by one GRPO step. The reward is \TBD[choose one]:
+\begin{itemize}[itemsep=1pt,topsep=2pt]
+  \item \emph{rubric reward}, in which a fixed local model induces a rubric from the
+    contrast between the references and the student rollouts and a blind verifier
+    scores each rollout \autocite{fang_ropd_2026}; or
+  \item \emph{reference-agreement reward}, the fraction of references whose extracted
+    final answer matches the rollout's.
+\end{itemize}
+The local rubricator and verifier are the same model for every provider and are not
+charged against the budget. Their calls are reported separately in
+Chapter~\ref{chap:Evaluation}.
+
+Ground-truth answers are withheld from the update so that the student learns only
+from providers, which is the premise of distillation. They are used only on the
+selection and test sets.
+
+\paragraph{Provider-free control.} GRPO with the ground-truth correctness reward and
+no provider is run at matched compute. If it matches the distilled students, providers
+add nothing beyond the verifiable reward on these tasks, and the selection problem is
+uninformative there. This control bounds what any selector can show.
+
+\section{Measuring Marginal Value}
+\label{imp:sec:Marginal}
+
+Hypotheses H1 and H2 concern the marginal value $v(k, d; \theta)$, which is not
+directly observable. It is estimated by branching:
+\begin{enumerate}[itemsep=1pt,topsep=2pt]
+  \item Run a reference trajectory under uniform allocation and save checkpoints
+    $\theta^{(0)}, \dots, \theta^{(C)}$ at \TBD[e.g.\ 0, 25, 50 and 75\%] of the
+    budget.
+  \item From each checkpoint, and for each arm $(k, d)$, run $R$ rounds on that arm
+    alone, with $S$ seeds.
+  \item Estimate $\hat v(k, d; \theta^{(c)})$ as the mean change in selection-set
+    utility divided by the cost of the branch, with a bootstrap confidence interval
+    over seeds and selection-set items.
+\end{enumerate}
+The procedure costs $K D C S$ branches of $R$ rounds each,
+\TBD[e.g.\ $5 \times 3 \times 4 \times 3 = 180$ short runs]. Because every branch
+starts from the same checkpoint, differences between arms at a checkpoint are not
+confounded by differences in the student.
+
+\section{Selection Policies}
+\label{imp:sec:Selectors}
+
+\subsection{Reference policies}
+
+\begin{description}[itemsep=2pt,topsep=4pt]
+  \item[Uniform.] Arms are drawn uniformly among those affordable.
+  \item[Strongest-only.] All queries go to the provider with the highest accuracy on
+    the selection set, with domains drawn uniformly.
+  \item[Cheapest-only.] All queries go to the provider of lowest price.
+  \item[Best static in hindsight.] Among a fixed set of static allocations, including
+    one that assigns each domain its best provider at $\theta^{(0)}$ from
+    Section~\ref{imp:sec:Marginal}, the one with the highest final test utility.
+    It is not a deployable policy, since it is chosen using final results.
+  \item[Greedy oracle.] At every round, every affordable arm is tried from the current
+    student and the one with the highest selection-set gain per unit cost is kept. It
+    is an upper reference, run on \TBD[a subset of budgets] because of its cost.
+\end{description}
+
+\subsection{Adaptive selectors}
+
+\begin{description}[itemsep=2pt,topsep=4pt]
+  \item[Cost-aware EXP3.] The adversarial bandit used by Online Data Mixing
+    \autocite{albalak_odm_2023,auer_exp3_2002}, with rewards divided by the arm's
+    cost. It makes no stationarity assumption but ignores the student's state.
+  \item[Sliding-window UCB with costs.] An upper-confidence-bound rule on reward per
+    unit cost, computed over the last $W$ pulls of each arm so that stale estimates
+    are discarded \autocite{garivier_ducb_2011}, combined with the budget-aware
+    ratio rule of bandits with knapsacks \autocite{badanidiyuru_bwk_2013}.
+  \item[Contextual selector.] LinUCB \autocite{li_linucb_2010}, or linear Thompson
+    sampling, with context $s_t$ given by the student's per-domain selection
+    accuracy and \TBD[further features, e.g.\ the fraction of GRPO groups with
+    non-zero advantage per domain]. It is the only selector that can, in principle,
+    represent the state dependence of H2.
+\end{description}
+
+All adaptive selectors begin with one round on each arm, and draw each arm
+with probability at least $\gamma / (KD)$ thereafter so that no arm is abandoned on
+the strength of a single noisy reward.
+
+\section{Selection Rewards}
+\label{imp:sec:Rewards}
+
+Four selection rewards are implemented. They differ in cost and in how directly they
+measure what the selector is trying to maximise.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|p{6.3cm}|p{4.2cm}|}
+\hline
+\textbf{Signal} & \textbf{Definition} & \textbf{Extra cost per round} \\
+\hline
+Utility gain & $U_{\mathrm{sel}}(\theta_t) - U_{\mathrm{sel}}(\theta_{t-1})$ on the
+  selection set & one evaluation pass \\
+Loss decrease & reduction in the update loss on the batch, as in data mixing
+  \autocite{albalak_odm_2023} & none \\
+Learnability & mean student log-likelihood of the provider's references, per token
+  \autocite{li_learnability_gap_2025,guo_lada_2026} & one forward pass \\
+Signal density & fraction of GRPO groups whose advantages are not all zero & none \\
+\hline
+\end{tabular}
+\caption{Selection rewards. Utility gain is the target; the other three are proxies
+whose agreement with it is measured in Section~\ref{eval:sec:Rewards}.}
+\label{imp:tab:rewards}
+\end{table}
+
+\section{Data Boundaries}
+\label{imp:sec:Boundaries}
+
+The harness enforces the access constraints of the problem statement. Providers
+receive prompts and return text, and never receive student parameters, gradients or
+rollouts. The student never receives provider parameters or logits. Prompts are
+visible to the provider that answers them, so the setting does not protect the
+privacy of the student's prompts. Mechanisms that would, such as differentially
+private prompt generation \autocite{hong_dpopt_2024}, are outside the scope of this
+thesis.
 
 \section{Testing}
 \label{imp:sec:Testing}
+
+\TBD[unit tests for budget accounting (no run exceeds $B$), cache determinism (the
+same seed yields the same responses), checker correctness on hand-labelled examples,
+and a sanity check that the reward of Section~\ref{imp:sec:Update} is lower for the
+degraded provider than for its source]
 
 \section{Problems Encountered}
 \label{imp:sec:Problems Encountered}
@@ -27,3 +301,8 @@ public class HelloWorld {
 \section{Limitations}
 \label{imp:sec:Limitations}
 
+Providers are simulated with open models, so their prices are assigned rather than
+observed and their behaviour does not change over time. Tasks are single-turn and
+verifiable, which keeps rewards cheap but leaves agentic and open-ended tasks
+untested. There is a single student, so interactions between several students
+competing for the same providers are not studied.
