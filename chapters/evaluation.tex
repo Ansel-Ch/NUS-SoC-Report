@@ -16,16 +16,23 @@ hypothesis the decision rule is stated before the results.
 \section{Hardware}
 \label{sec:Hardware}
 
-\TBD[GPU model and count, cluster and scheduler, inference server used for providers,
-total GPU-hours]
+The main experiments run on a shared server with six NVIDIA L40 GPUs of 48\,GB each,
+two AMD EPYC 7763 processors and 1\,TB of memory, without a job scheduler. Jobs wait for
+an idle GPU, use at most two GPUs at a time and one GPU per run. Providers and the
+student's rollouts are served with vLLM, and training uses PyTorch with the PEFT library
+(Section~\ref{imp:sec:config}). Screening the candidate providers took 3.0 GPU-hours and
+building the response cache 8.1 GPU-hours. The motivating experiment of
+Section~\ref{eval:sec:Motivating} runs on the School of Computing's Slurm cluster, on
+NVIDIA A100 and H100 GPUs. \TBD[total GPU-hours once the experiments are complete]
 
 \section{Experimental Setup}
 \label{sec:Experimental Setup}
 
 \paragraph{Metrics.} The primary metric is test utility $U(\theta_\tau)$, the
 weighted mean of per-domain test accuracy, with equal domain weights unless stated.
-Every result is reported together with the budget spent and the number of
-uncharged verifier calls. Where students of different capacity are compared, the
+Every result is reported together with the budget spent and the number of gradient
+steps taken, since at equal budget cheaper providers buy more steps
+(Section~\ref{imp:sec:config}). Where students of different capacity are compared, the
 teacher-gap recovery
 \[
   R = \frac{\mathrm{Acc}_{\mathrm{method}} - \mathrm{Acc}_{\mathrm{base}}}
@@ -68,8 +75,9 @@ X1 & OLMo-2-1B & GOLD hybrid & \TBD & \TBD \\
 X2 & SmolLM2-1.7B & GOLD hybrid & \TBD & \TBD \\
 \hline
 \end{tabular}
-\caption{Countdown test accuracy and teacher-gap recovery for same-tokenizer and
-cross-tokenizer on-policy distillation.}
+\caption[Same-tokenizer and cross-tokenizer distillation on Countdown]{Countdown test
+accuracy and teacher-gap recovery for same-tokenizer and cross-tokenizer on-policy
+distillation.}
 \label{eval:tab:motivating}
 \end{table}
 
@@ -94,13 +102,14 @@ branching from the initial student, as in Section~\ref{imp:sec:Marginal}.
 \centering
 \begin{tabular}{|l|c|c|c|}
 \hline
-\textbf{Provider} & \textbf{Countdown} & \textbf{Math} & \textbf{Code} \\
+\textbf{Provider} & \textbf{Countdown} & \textbf{MATH} & \textbf{Code} \\
 \hline
-$M_1$ strong generalist & \TBD & \TBD & \TBD \\
-$M_2$ math specialist   & \TBD & \TBD & \TBD \\
-$M_3$ code specialist   & \TBD & \TBD & \TBD \\
-$M_4$ small generalist  & \TBD & \TBD & \TBD \\
-$M_5$ degraded          & \TBD & \TBD & \TBD \\
+Phi-4                   & \TBD & \TBD & \TBD \\
+Qwen2.5-7B              & \TBD & \TBD & \TBD \\
+Qwen2.5-Coder-7B        & \TBD & \TBD & \TBD \\
+Qwen2.5-3B              & \TBD & \TBD & \TBD \\
+Phi-4-mini              & \TBD & \TBD & \TBD \\
+Phi-4, degraded         & \TBD & \TBD & \TBD \\
 \hline
 \end{tabular}
 \caption{Estimated marginal value $\hat v(k, d; \theta^{(0)})$, in utility points per
@@ -166,6 +175,8 @@ Strongest-only             & \TBD & \TBD & \TBD \\
 Cheapest-only              & \TBD & \TBD & \TBD \\
 Best static in hindsight   & \TBD & \TBD & \TBD \\
 \hline
+Headroom per cost (proposed) & \TBD & \TBD & \TBD \\
+Discounted Thompson sampling & \TBD & \TBD & \TBD \\
 Cost-aware EXP3            & \TBD & \TBD & \TBD \\
 Sliding-window UCB         & \TBD & \TBD & \TBD \\
 Contextual (LinUCB)        & \TBD & \TBD & \TBD \\
@@ -192,7 +203,8 @@ selector, shaded intervals.}
 \label{eval:sec:Rewards}
 
 \paragraph{Question.} Can the cheap proxies of Table~\ref{imp:tab:rewards} stand in for
-utility gain, which requires an evaluation pass every round?
+utility gain, which requires an
+evaluation pass after every block of rounds?
 
 \paragraph{Protocol.} On the branches of Experiment~2, the rank correlation between
 each proxy and the measured utility gain is computed per domain. The best adaptive
@@ -221,9 +233,9 @@ a selector reaches when driven by it.}
 \section{Experiment 5: Allocation Analysis and Robustness}
 \label{eval:sec:Allocation}
 
-\paragraph{Question.} Where does each selector spend its budget, does that spending
-track each provider's contribution, and does the selector learn to avoid the degraded
-provider?
+\paragraph{Question.} How does each selector divide its budget among the providers?
+Does its spending track each provider's contribution, and does it learn to avoid the
+degraded provider?
 
 \paragraph{Protocol.} For each selector, the share of budget spent on each provider is
 compared with a post hoc valuation of that provider's contribution to final utility

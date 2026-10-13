@@ -149,8 +149,9 @@ uniform rewards on a domain therefore teaches nothing there, however strong it i
 
 \begin{Definitions}[Arm, round and selector]
 An arm is a provider--domain pair $a = (k, d)$. In each round $t$ the
-selector chooses an arm $a_t$, a batch of prompts from $\mathcal{X}_{d_t}$ is answered
-by $M_{k_t}$, and the student is updated on the result. A selector is a policy
+selector chooses an arm $a_t$, possibly holding the same arm for a block of several
+rounds, a batch of prompts from $\mathcal{X}_{d_t}$ is answered by $M_{k_t}$, and the
+student is updated on the result. A selector is a policy
 $\pi_{\mathrm{sel}}$ that maps the history of contexts, arms and rewards to the next
 arm.
 \end{Definitions}
@@ -312,8 +313,8 @@ methods assumes a single teacher that is queried on every training prompt.
 
 A single teacher caps the student at that teacher's competence and propagates its
 errors. Multi-teacher on-policy distillation instead combines several teachers. MOPD
-trains one reinforcement-learning specialist per domain, routes each training prompt
-to the specialist for its domain, and distils on the student's own rollouts. It
+trains one specialist per domain with reinforcement learning, routes each training
+prompt to the specialist for its domain, and distils on the student's own rollouts. It
 recovers 91--95\% of each specialist's advantage over the student and has been used to
 post-train an industrial model \autocite{ma_mopd_2026}. TrustMOPD removes the need for
 domain labels by weighting teachers at every token, using each teacher's divergence
