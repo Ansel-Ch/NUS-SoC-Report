@@ -384,7 +384,10 @@ upper-confidence-bound algorithms track arms whose reward distributions change o
 time \autocite{garivier_ducb_2011}. Contextual bandits such as LinUCB condition the
 choice of arm on an observed feature vector \autocite{li_linucb_2010}, which here can
 summarise the student's state. None of these models the case in which the selector's
-own actions cause the change in rewards.
+own actions cause the change in rewards. Rotting bandits come closest: the reward of an
+arm decays as that arm is pulled \autocite{levine_rotting_2017}. This captures
+diminishing returns from a single source, but not the coupling present here, where
+pulling any arm changes the student and with it the value of every other arm.
 
 Two further lines of work estimate the value of a source without training on it.
 Active learning from multiple oracles learns each labeller's accuracy and queries the
@@ -467,10 +470,23 @@ This thesis makes the following contributions.
     marginal value by branching training from shared student checkpoints, and tests
     whether the most valuable provider differs across domains (H1) and changes over
     training (H2) (Chapter~\ref{chap:Evaluation}).
-  \item \textbf{Selectors and baselines.} It evaluates budget-aware adaptive
-    selectors against uniform, strongest-only, cheapest-only and best-static
-    allocations, with a greedy oracle as an upper reference, to test whether
-    adaptivity pays (H3).
+  \item \textbf{Analysis of agreement rewards.} It shows that a student rewarded for
+    agreeing with a provider's answers converges to the provider's most common answer,
+    so that a provider's value as a teacher is bounded by its majority-vote accuracy
+    rather than its single-response accuracy. It measures that such rewards carry about
+    as much learning signal as ground truth on mathematics and code, and that judging
+    providers by their agreement with one another favours the model family that makes
+    up most of the pool (Chapter~\ref{chap:Implementation}).
+  \item \textbf{A headroom-per-cost selector.} It proposes a selector that scores each
+    arm by the gap between the provider's ceiling and the student's current accuracy,
+    divided by the provider's price. Because prices and ceilings are fixed before
+    training, the selector yields testable predictions of H1 and H2, including the
+    student accuracy at which the best provider should change
+    (Chapter~\ref{chap:Implementation}).
+  \item \textbf{Selectors and baselines.} It evaluates the headroom-per-cost selector and
+    other budget-aware adaptive selectors against uniform, strongest-only, cheapest-only
+    and best-static allocations, with a greedy oracle as an upper reference, to test
+    whether adaptivity pays (H3).
   \item \textbf{Reward signals and allocation analysis.} It compares utility-based
     selection rewards with the training-loss proxies used in data mixing and
     federated distillation, and compares each provider's share of the budget with a
