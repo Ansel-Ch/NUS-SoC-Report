@@ -1,29 +1,740 @@
-\chapter{Implementation}
+\chapter{Methodology}
 \label{chap:Implementation}
 
-\section{Design Overview}
-\label{imp:sec:Design Overview}
+This chapter describes the testbed built to study provider-selective distillation and
+the methods evaluated on it. Section~\ref{imp:sec:overview} gives an overview of one
+training run. Section~\ref{imp:sec:tasks} describes the three task domains and how
+answers are checked. Section~\ref{imp:sec:providers} introduces the student, the
+provider pool, the prices and the degraded provider. Section~\ref{imp:sec:update}
+specifies how the student learns from a black-box provider, and
+Section~\ref{imp:sec:selectors} specifies the selection policies and baselines.
+Section~\ref{imp:sec:marginal} describes how marginal value is measured to test H1 and
+H2. Section~\ref{imp:sec:config} lists the experimental configuration,
+Section~\ref{imp:sec:verification} reports how the testbed was verified, and
+Section~\ref{imp:sec:limitations} states the limitations of the design.
 
-\begin{figure}[H]
-    \begin{center}
-\begin{lstlisting}[language=Java]
-public class HelloWorld {
-    public static void main(String[] args) {
-        // Prints "Hello, World!" to the terminal window.
-        System.out.println("Hello, World!");
-    }
-}
-\end{lstlisting}
-    \end{center}
-    \caption{Hello World in Java}\label{imp:fig:HelloWorldJava}
+The notation follows Section~\ref{sec:Problem Statement}. The student is $\pi_\theta$,
+the providers are $M_1, \dots, M_K$ with prices $c_1, \dots, c_K$, prompts come from
+domains $\mathcal{X}_1, \dots, \mathcal{X}_D$, an arm is a pair $a = (k, d)$, each round
+uses a batch of $b$ prompts, and the total budget is $B$.
+
+\section{Overview}
+\label{imp:sec:overview}
+
+A training run alternates between choosing an arm and learning from it.
+Figure~\ref{imp:fig:round} shows one round. The selector picks an arm $(k, d)$. The
+student answers $b$ prompts from domain $d$, sampling $G$ responses to each. Every
+response is reduced to a canonical final answer, and each response is rewarded by how
+well its answer agrees with the answers that provider $k$ gave to the same prompt. The
+student then takes one policy-gradient step, and the budget is charged $c_k$ for every
+prompt on which the provider was consulted. Every ten rounds the student is evaluated
+on a held-out selection set, and the result is passed back to the selector.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=2pt, align=center, font=\small,
+                minimum height=1.1cm, text width=2.9cm},
+    arr/.style={-{Stealth[length=2.2mm]}, thick}]
+  \node[box] (sel)  at (0, 0)    {Selector\\chooses $(k, d)$};
+  \node[box] (roll) at (4.2, 0)  {Student samples\\$G$ responses to\\$b$ prompts from $\mathcal{X}_d$};
+  \node[box] (can)  at (8.4, 0)  {Canonical answers\\$\kappa_d(y)$};
+  \node[box] (filt) at (8.4, -2.4) {Pre-query filter:\\skip prompts with\\identical answers};
+  \node[box] (rew)  at (4.2, -2.4) {Query cached answers\\of $M_k$, charge $c_k$;\\agreement reward};
+  \node[box] (upd)  at (0, -2.4)   {GRPO step on\\LoRA adapter};
+  \node[box, text width=6.5cm] (ev) at (2.1, -4.6)
+       {Every $L = 10$ rounds: greedy evaluation\\on the selection set, accuracies $\alpha_d$};
+  \draw[arr] (sel) -- (roll);
+  \draw[arr] (roll) -- (can);
+  \draw[arr] (can) -- (filt);
+  \draw[arr] (filt) -- (rew);
+  \draw[arr] (rew) -- (upd);
+  \draw[arr] (upd.south) -- ++(0, -0.55) -| (ev.north);
+  \draw[arr] (ev.west) -- ++(-1.0, 0) |- (sel.west);
+\end{tikzpicture}
+\caption{One round of provider-selective distillation. The selector is consulted and
+updated once per block of $L$ rounds.}
+\label{imp:fig:round}
 \end{figure}
 
-\section{Testing}
-\label{imp:sec:Testing}
+Algorithm~\ref{imp:alg:run} gives the complete procedure. The components are described
+in the sections that follow.
 
-\section{Problems Encountered}
-\label{imp:sec:Problems Encountered}
+\begin{algorithm}[htbp]
+\caption{One training run}
+\label{imp:alg:run}
+\begin{algorithmic}[1]
+\Require student $\pi_\theta$ with a fresh LoRA adapter, providers' cached answers,
+  prices $c_k$, budget $B$, round cap $T_{\max}$, block length $L$
+\State $t \gets 0$, spent $\gets 0$
+\State $\alpha \gets$ \Call{Evaluate}{$\pi_\theta$} \Comment{per-domain selection accuracy}
+\While{$t < T_{\max}$ and some arm is affordable}
+  \State $(k, d) \gets$ \Call{Select}{$\alpha$} \Comment{only arms with $b\,c_k \le B - \text{spent}$}
+  \State $\alpha_{\mathrm{before}} \gets \alpha$, cost $\gets 0$
+  \For{$L$ rounds, while $(k, d)$ is affordable and $t < T_{\max}$}
+    \State draw the next $b$ prompts $x_1, \dots, x_b$ from $\mathcal{X}_d$
+    \State sample $y_{i,1}, \dots, y_{i,G} \sim \pi_\theta(\cdot \mid x_i)$ for each $i$
+    \State keep prompts whose canonical answers $\kappa_d(y_{i,g})$ are not all equal
+    \State reward each kept response against $M_k$'s cached answers (Eq.~\ref{imp:eq:reward})
+    \State take one GRPO step on the kept groups (Eq.~\ref{imp:eq:loss})
+    \State spent $\gets$ spent $+\, c_k \cdot$ (number of kept prompts); $t \gets t + 1$
+    \State save a checkpoint when progress first reaches 25\%, 50\% or 75\%
+  \EndFor
+  \State $\alpha \gets$ \Call{Evaluate}{$\pi_\theta$}
+  \State \Call{UpdateSelector}{$(k, d)$, $\alpha_{\mathrm{before}}$, $\alpha$, cost}
+\EndWhile
+\State evaluate on the full selection and test sets
+\end{algorithmic}
+\end{algorithm}
 
-\section{Limitations}
-\label{imp:sec:Limitations}
+\section{Tasks and Answer Checking}
+\label{imp:sec:tasks}
 
+\subsection{Domains}
+\label{imp:sec:domains}
+
+Three single-turn domains are used, each with answers that can be checked by a
+program. Table~\ref{imp:tab:domains} summarises them. Every domain is split into a
+prompt pool of 2,000 items, on which the student trains and for which provider
+responses are cached, a selection set of 500 items, which supplies the selector's
+feedback, and a test set of 500 items, which is used only for final results. The three
+splits are disjoint within each domain.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lllp{5.4cm}@{}}
+\toprule
+\textbf{Domain} & \textbf{Source} & \textbf{Answer} & \textbf{Filtering} \\
+\midrule
+Countdown & Countdown-Task-GOLD & equation & three-number puzzles only; pool puzzles that also
+  appear in the test configuration removed \\
+MATH & MATH \autocite{hendrycks_math_2021} & expression & difficulty levels 3 to 5, all
+  seven subjects \\
+Code & KodCode-V1 \autocite{xu_kodcode_2025} & function & single function, medium or
+  hard, no fixtures, low similarity to public benchmarks, reference solution verified \\
+\bottomrule
+\end{tabular}
+\caption{Task domains. Each has a 2,000-prompt pool, a 500-prompt selection set and a
+500-prompt test set.}
+\label{imp:tab:domains}
+\end{table}
+
+\paragraph{Countdown.} Given three integers and a target, the model must write an
+arithmetic expression that uses each integer exactly once and evaluates to the target,
+inside \texttt{<answer>} tags. Puzzles come from the dataset released with GOLD
+\autocite{patino_gold_2025}.\footnote{\url{https://huggingface.co/datasets/HuggingFaceTB/Countdown-Task-GOLD}}
+The pool is drawn from its 80,000-puzzle training configuration and the selection and
+test sets from its 10,000-puzzle test configuration. Four-number puzzles were excluded
+after screening: the base student solved 0.8\% of them, and only 6\% of its groups of
+eight responses contained both a correct and an incorrect answer, so reinforcement
+learning would have had almost nothing to learn from. On three-number puzzles the
+corresponding figures were 6\% and 32\%.
+
+\paragraph{MATH.} Competition mathematics problems at difficulty levels 3 to 5
+\autocite{hendrycks_math_2021}, of which there are 5,586 in the training split and 3,669
+in the test split. The pool and selection set come from the training split and the
+test set from the test split. Prompts ask for step-by-step reasoning and a final answer
+in \verb|\boxed{}|.
+
+\paragraph{Code.} Python function-writing problems from KodCode-V1
+\autocite{xu_kodcode_2025}, each with a pytest test file. Of its 484,097 problems, 65,087
+remain after keeping instruction-style problems with a single target function, medium
+or hard difficulty, no pytest fixtures or parametrisation, and a reported similarity
+below 0.8 to existing benchmarks. Each problem's reference solution was then run against
+its tests in the sandbox described below, and only problems whose reference passes were
+kept (3,608 of 3,900 sampled candidates, 92.5\%). The prompt states the required
+function signature.
+
+\paragraph{Domains considered and rejected.} GSM8K \autocite{cobbe_gsm8k_2021} was the
+original mathematics domain, but Qwen2.5-7B, Qwen2.5-14B, Qwen2.5-32B and Phi-4 all
+answered between 94 and 97\% of screening prompts correctly, which leaves almost no
+difference between providers for a selector to exploit. MBPP \autocite{austin_mbpp_2021} was the original
+code domain, but it contains only 974 problems in total, too few for a 2,000-prompt pool.
+
+\subsection{Canonical answers and agreement}
+\label{imp:sec:canonical}
+
+Providers are black boxes, so the student can only be compared with a provider through
+the text each produces. Comparing whole responses would reward imitation of style. The
+testbed instead reduces every response $y$ to a canonical final answer
+$\kappa_d(y)$, or to $\varnothing$ when no valid answer can be extracted, and two
+responses agree when their canonical answers are equal. The canonical form is chosen so
+that different but equivalent answers compare equal.
+
+\begin{description}[itemsep=3pt,topsep=4pt]
+  \item[Countdown.] The expression in the last \texttt{<answer>} tag, with any trailing
+    ``$= v$'' removed and LaTeX operators and delimiters normalised. If it uses exactly
+    the given integers, $\kappa$ is its value rounded to four decimal places; otherwise
+    $\kappa = \varnothing$. Two different expressions with the same value therefore
+    agree.
+  \item[MATH.] The content of the last \verb|\boxed{}|, parsed and normalised by the
+    Math-Verify library,\footnote{\url{https://github.com/huggingface/Math-Verify}} so
+    that, for example, $0.5$ and $\frac{1}{2}$ have the same canonical form.
+  \item[Code.] The function's behaviour on the test inputs. The longest Python code block
+    is extracted and run in the sandbox, and $\kappa$ is the tuple of values the target
+    function returns, or the exception it raises, on the inputs used by the tests. The
+    expected outputs are not used, so two programs agree when they behave identically,
+    whether or not either is correct.
+\end{description}
+
+Correctness, which is needed only for evaluation and for the provider-free control, is
+checked separately: a Countdown answer must equal the target, a MATH answer must be
+judged equivalent to the reference by Math-Verify, and a program must pass every test.
+
+\subsection{Sandbox and harness rules}
+\label{imp:sec:sandbox}
+
+Generated programs run in a bubblewrap sandbox\footnote{\url{https://github.com/containers/bubblewrap}}
+with a read-only file system, no network access, a 4\,GB memory limit and time limits
+of 5 seconds to load a program and 2 to 3 seconds per test. Before running, the code is
+reduced to its module-level imports, definitions and assignments, which removes the
+self-tests, print statements and input-reading code that models often append, and
+\texttt{from typing import *} is prepended so that type hints such as
+\texttt{List[int]} do not fail for lack of an import. These rules were added after
+screening showed well-formed functions being scored as missing answers, and they apply
+identically to the student and to every provider.
+
+\section{Student and Providers}
+\label{imp:sec:providers}
+
+\subsection{Student}
+
+The student is Qwen2.5-1.5B-Instruct \autocite{qwen_qwen25_2024}, trained through a
+LoRA adapter \autocite{hu_lora_2022} of rank 16 on every linear layer of the attention
+and feed-forward blocks. A rank of 64 was measured to add only 1.5\% to the time per
+step, so cost does not constrain the choice of rank.
+
+\subsection{Provider pool}
+
+Nine open-weight models were screened as candidate providers on 200 selection prompts
+per domain (Chapter~\ref{chap:Evaluation}), and five were kept. Two members of the
+screened set were dropped because Phi-4 matched or exceeded them in every domain at an
+equal or lower price (Qwen2.5-14B and Qwen2.5-32B), one because it repeated itself until
+the length limit on Countdown and was therefore expensive (Granite-3.3-8B), and one
+because it gave no advantage in its own speciality (Qwen2.5-Math-7B, which scored 0.73
+on MATH against 0.72 for the general Qwen2.5-7B, and produced no valid Countdown
+answers). Table~\ref{imp:tab:pool} lists the final pool.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}llrrccc@{}}
+\toprule
+ & & & & \multicolumn{3}{c}{\textbf{Ceiling $\mu_{k,d}$}} \\
+\cmidrule(l){5-7}
+\textbf{Provider} & \textbf{Family} & \textbf{Params} & \textbf{Price $c_k$} &
+  \textbf{Countdown} & \textbf{MATH} & \textbf{Code} \\
+\midrule
+Phi-4 \autocite{abdin_phi4_2024}              & Phi  & 14.7B & 2.92 & 0.874 & 0.804 & 0.686 \\
+Qwen2.5-7B \autocite{qwen_qwen25_2024}        & Qwen & 7.6B  & 1.00 & 0.810 & 0.750 & 0.580 \\
+Qwen2.5-Coder-7B \autocite{hui_qwen25coder_2024} & Qwen & 7.6B & 0.98 & 0.620 & 0.678 & 0.612 \\
+Qwen2.5-3B \autocite{qwen_qwen25_2024}        & Qwen & 3.1B  & 0.50 & 0.538 & 0.690 & 0.462 \\
+Phi-4-mini \autocite{microsoft_phi4mini_2025} & Phi  & 3.8B  & 0.84 & 0.616 & 0.618 & 0.558 \\
+Phi-4, degraded                               & Phi  & 14.7B & 2.92 & 0.614 & 0.532 & 0.492 \\
+\midrule
+Student, before training & Qwen & 1.5B & -- & 0.195 & 0.414 & 0.438 \\
+\bottomrule
+\end{tabular}
+\caption{The provider pool. The ceiling $\mu_{k,d}$ is the accuracy of the provider's
+most common answer over its four cached responses, on the 500-prompt selection set
+(Section~\ref{imp:sec:update} explains why this is the relevant measure of quality).
+The degraded provider is described in Section~\ref{imp:sec:degraded}. The student's row
+gives its greedy accuracy on the 128-prompt selection subsample used during training.}
+\label{imp:tab:pool}
+\end{table}
+
+The pool was designed so that the hypotheses can be tested rather than assumed. It
+contains a strong and expensive provider (Phi-4), a mid-priced generalist
+(Qwen2.5-7B), a code specialist at the same price (Qwen2.5-Coder-7B), a cheap provider
+whose ceiling the student can plausibly reach during training (Qwen2.5-3B), and a cheap
+provider from outside the student's model family (Phi-4-mini). The last of these
+separates two properties that would otherwise coincide: without it, the only non-Qwen
+provider would also be the only expensive one, and any effect of sharing a model family
+with the student could not be told apart from an effect of price.
+
+\subsection{Prices}
+\label{imp:sec:prices}
+
+Prices are set from measured compute and fixed before any training run. The price of
+provider $k$ is the GPU time it needs to produce one response on one NVIDIA L40,
+relative to Qwen2.5-7B:
+\[
+  c_k = \frac{\bar{\ell}_k / \nu_k}{\bar{\ell}_{\mathrm{ref}} / \nu_{\mathrm{ref}}},
+\]
+where $\bar{\ell}_k$ is the provider's mean response length in tokens over the
+screening prompts of the three domains and $\nu_k$ is its generation throughput in tokens per second, both measured
+during screening with the same serving software. A provider that writes long responses
+is therefore more expensive per query, as it would be under per-token pricing. This
+choice matters: an earlier estimate based on throughput alone had given Granite-3.3-8B a
+price of 1.1, whereas its long responses put its measured price at 2.49.
+
+Fixing prices in advance allows the switch points of Section~\ref{imp:sec:headroom} to
+be stated as predictions before any training run, rather than fitted afterwards.
+
+\subsection{Response cache}
+\label{imp:sec:cache}
+
+Following Section~\ref{sec:Problem Statement}, provider responses are generated once and
+then charged as if they were live queries. Each provider answered every pool and
+selection prompt $m = 4$ times, at temperature 0.7 with nucleus sampling at 0.95 and at
+most 2,048 new tokens, using vLLM \autocite{kwon_vllm_2023}. This amounts to 30,000
+responses per provider and took 8.1 GPU-hours for the five models. For the pool, only
+the canonical answers are stored with each response; whether those answers are correct
+is never recorded, so it cannot leak into training.
+
+\subsection{The degraded provider}
+\label{imp:sec:degraded}
+
+The degraded provider is a copy of Phi-4 at the same price whose final answers are
+corrupted on a fraction $p = 0.3$ of prompts. It tests whether a selector notices that a
+provider is worse when its price gives no hint. Corruption is applied per prompt: with
+probability $p$, decided by a hash of the prompt identifier, all four responses to the
+prompt are replaced by one corrupted response. That response is the parent's response
+carrying its most common answer, with the final answer changed to a different value:
+another expression over the same integers for Countdown, a shifted value for MATH, and a
+wrapper that perturbs the function's return values for code. No ground truth is used to
+build it.
+
+The per-prompt design follows from a short calculation. If each of the $m = 4$ responses
+were corrupted independently with probability $p$, and corrupted answers were distinct,
+the most common answer would survive whenever at least two responses survived, and the
+provider's ceiling would fall only to about
+\[
+  \mu' \approx \mu \left(1 - p^4 - 4p^3(1 - p)\right) = 0.92\,\mu \quad \text{at } p = 0.3,
+\]
+which makes the degraded provider hard to distinguish from its parent. Corrupting whole
+prompts instead gives $\mu' = (1 - p)\,\mu$ in expectation. Table~\ref{imp:tab:degraded} shows
+that the built provider matches this prediction once the realised corruption rate is
+used. On the screening data, per-response corruption at $p = 0.3$ lowered Phi-4's ceilings
+only from 0.66, 0.76 and 0.74 to 0.56, 0.69 and 0.66.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+ & \textbf{Countdown} & \textbf{MATH} & \textbf{Code} \\
+\midrule
+Phi-4 ceiling $\mu$                       & 0.874 & 0.804 & 0.686 \\
+Prompts corrupted (selection set) $\hat{p}$ & 0.284 & 0.342 & 0.284 \\
+Predicted ceiling $(1 - \hat{p})\,\mu$     & 0.626 & 0.529 & 0.491 \\
+Measured ceiling of the degraded provider  & 0.614 & 0.532 & 0.492 \\
+\bottomrule
+\end{tabular}
+\caption{The degraded provider against the per-prompt prediction.}
+\label{imp:tab:degraded}
+\end{table}
+
+\section{Learning from a Black-Box Provider}
+\label{imp:sec:update}
+
+This section instantiates the operator $\operatorname{Update}$ of
+Section~\ref{sec:Problem Statement}. The student is trained by black-box on-policy
+distillation: it learns from its own responses, and the provider's responses are used
+only to score them.
+
+\subsection{Agreement reward}
+
+For a prompt $x$ and provider $k$, let $y_{k,1}, \dots, y_{k,m}$ be the cached responses
+and let
+\[
+  n_k(z; x) = \left|\{\, j : \kappa_d(y_{k,j}) = z \,\}\right|
+\]
+count how many of them give the canonical answer $z$. A student response $y$ with
+answer $z = \kappa_d(y)$ receives the reward
+\begin{equation}
+  r_k(y; x) =
+  \begin{cases}
+    \dfrac{n_k(z; x)}{\max_{z'} n_k(z'; x)} & \text{if } z \ne \varnothing
+      \text{ and the provider gave at least one valid answer,} \\[2ex]
+    0 & \text{otherwise.}
+  \end{cases}
+  \label{imp:eq:reward}
+\end{equation}
+Matching the provider's most common answer earns a reward of 1, matching a less common
+answer earns partial credit, and any other response earns 0. If the provider's answers to a prompt were $\{18, 18, 18, 22\}$, the student's answers
+18, 22 and 7 would receive 1, $1/3$ and 0. This normalised vote share was chosen over two
+alternatives: the indicator of matching the most common answer, and the unnormalised vote
+share $n_k(z; x)/m$. Section~\ref{imp:sec:reward-evidence} gives the evidence. No ground
+truth is involved, since the reward depends only on the student's answer and the
+provider's answers.
+
+\subsection{Policy update}
+
+Each round produces $G = 8$ responses for each of the $b = 8$ prompts. Rewards are turned
+into group-relative advantages as in GRPO (Chapter~\ref{chap:Preliminaries}),
+\[
+  A_{i,g} = \frac{r_{i,g} - \operatorname{mean}_{h}\, r_{i,h}}{\operatorname{std}_{h}\, r_{i,h} + \epsilon},
+\]
+with $A_{i,g} = 0$ for every response in a group whose rewards are all equal. The student
+then takes one gradient step on
+\begin{equation}
+  \mathcal{L}(\theta) = -\frac{1}{\sum_{i,g} |y_{i,g}|}
+    \sum_{i=1}^{b} \sum_{g=1}^{G} A_{i,g} \sum_{j=1}^{|y_{i,g}|}
+    \log \pi_\theta\big(y_{i,g,j} \mid x_i, y_{i,g,<j}\big),
+  \label{imp:eq:loss}
+\end{equation}
+where the sum over tokens is normalised by the total number of response tokens in the
+batch, as in DAPO \autocite{yu_dapo_2025}. Because each batch of responses is used for
+exactly one step, the importance ratio of GRPO equals one and its clipping never
+applies, and no KL penalty or reference model is used. The update is therefore a plain
+policy gradient with group-normalised rewards.
+
+\subsection{Pre-query filter}
+
+If all $G$ responses to a prompt share one canonical answer, including the case where
+none has a valid answer, then every agreement reward gives them the same value and the
+prompt contributes no gradient. Such prompts are dropped before the provider is
+consulted, so they are neither charged nor trained on. The filter uses no labels and no
+provider output, and on the screening data it removed 4 to 7\% of prompts in the three
+domains without losing any group that would have carried a learning signal.
+
+\subsection{What the student converges to}
+\label{imp:sec:ceiling}
+
+Ignoring the step size, the student's expected objective on a prompt $x$ is
+$J(\pi) = \sum_{z} \pi(z \mid x)\, r_k(z; x)$, where $\pi(z \mid x)$ is the probability
+that the student's answer is $z$. This is maximised by placing all probability on the
+answer with the highest reward, which under Equation~\ref{imp:eq:reward} is the
+provider's most common answer $\hat{z}_k(x)$. A student that fully learned from provider
+$k$ would therefore be correct on exactly those prompts where the provider's most common
+answer is correct. This motivates the ceiling
+\[
+  \mu_{k,d} = \Pr_{x \sim \mathcal{X}_d}\big[\, \hat{z}_k(x) \text{ is correct} \,\big],
+\]
+the provider's majority-vote accuracy \autocite{wang_selfconsistency_2023}, estimated on
+the selection set and reported in Table~\ref{imp:tab:pool}. The ceiling, rather than the
+provider's single-response accuracy, is the measure of provider quality used throughout.
+The two can differ substantially: on Countdown during screening, Phi-4 answered 53\% of
+prompts correctly per response but 66\% by majority vote.
+
+The quality of the learning signal can be stated in the same terms. Let $q$ be the
+expected reward of a correct response and $\varepsilon_z$ that of a wrong response with
+answer $z$. If $\varepsilon_z = \varepsilon$ for every wrong answer, then
+\[
+  J(\pi) = \varepsilon + (q - \varepsilon) \Pr_\pi[\text{correct}],
+  \qquad \nabla J = (q - \varepsilon)\, \nabla \Pr_\pi[\text{correct}],
+\]
+so learning from a provider is learning from correctness, slowed by the factor
+$q - \varepsilon$, called the gap below. When $\varepsilon_z$ varies, the remainder pulls
+the student towards the particular wrong answers that the provider favours. Separately, a
+group of $G$ responses produces a gradient only if its rewards are not all equal. For a
+binary reward with success probability $p$ per response this happens with probability
+\[
+  1 - p^G - (1 - p)^G,
+\]
+which is 0.22 for $p = 0.03$ and $G = 8$, close to the 0.20 measured for the base
+student on Countdown with three and four numbers. The useful signal in a batch is
+therefore proportional to the product of the fraction of informative groups and the gap.
+
+\subsection{Evidence for the choice of reward}
+\label{imp:sec:reward-evidence}
+
+Table~\ref{imp:tab:reward} compares the three agreement rewards with the ground-truth
+correctness reward on the base student's own responses, using the product of the
+informative fraction and the gap. On MATH and code, both vote-share rewards carry about
+as much signal as ground truth or more. The student's wrong answers tend to disagree with
+one another, so agreement with a provider varies more within a group than correctness
+does. On Countdown, the unnormalised vote share loses much of its gap, because providers
+there often give some invalid answers, which keeps the vote share of even a correct
+answer low. The normalised form removes that loss while keeping the higher informative
+fraction, and it is the best or close to the best agreement reward in every column.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Reward} & \textbf{Provider} & \textbf{Countdown (3 and 4)} & \textbf{MATH} & \textbf{Code} \\
+\midrule
+Correctness (ground truth) & --         & 0.20 & 0.57 & 0.48 \\
+\midrule
+Most common answer         & Qwen2.5-7B & 0.14 & 0.59 & 0.42 \\
+                           & Phi-4      & 0.11 & 0.57 & 0.42 \\
+Vote share                 & Qwen2.5-7B & 0.12 & 0.65 & 0.50 \\
+                           & Phi-4      & 0.12 & 0.61 & 0.47 \\
+Normalised vote share      & Qwen2.5-7B & 0.18 & 0.64 & 0.53 \\
+                           & Phi-4      & 0.13 & 0.61 & 0.48 \\
+\bottomrule
+\end{tabular}
+\caption{Learning signal per batch (fraction of informative groups multiplied by the
+gap) for each reward, on 200 screening prompts per domain with $G = 8$ responses from the
+base student. Countdown here includes four-number puzzles.}
+\label{imp:tab:reward}
+\end{table}
+
+The cost of partial credit is a slightly higher reward for wrong answers: for
+Qwen2.5-7B on MATH and code, $\varepsilon$ is 0.08 under the normalised vote share against
+0.05 under the most-common-answer indicator. The value of $\varepsilon$ is logged during
+training (Section~\ref{imp:sec:groundtruth}).
+
+\section{Selection Policies and Baselines}
+\label{imp:sec:selectors}
+
+\subsection{Blocks and feedback}
+
+Selectors choose an arm once per block of $L = 10$ rounds rather than every round. One
+gradient step changes selection accuracy by well under one percentage point, whereas an
+evaluation on 128 prompts has a standard error of about four percentage points, so
+feedback after a single round would be almost pure noise. At the end of each block the
+student is evaluated greedily, at temperature zero, on a fixed subsample of 128
+selection prompts per domain. This yields the context
+$s = (\alpha_1, \dots, \alpha_D)$ of Section~\ref{sec:Problem Statement}, the student's
+current accuracy in each domain. A selector only considers arms it can still afford for
+at least one round.
+
+\subsection{Headroom-per-cost selector}
+\label{imp:sec:headroom}
+
+The proposed selector estimates the marginal value $v(k, d; \theta)$ of
+Section~\ref{sec:Problem Statement} with a simple model. Section~\ref{imp:sec:ceiling}
+showed that learning from provider $k$ drives the student towards the ceiling
+$\mu_{k,d}$ rather than beyond it. If progress per round is further assumed to be proportional to the remaining
+headroom, the value of an arm per unit of cost is
+\[
+  \hat{v}(k, d) = \frac{\max\big(\mu_{k,d} - \alpha_d,\ 0\big)}{c_k}.
+\]
+The selector plays the arm of highest $\hat{v}$, and with probability 0.1 a uniformly
+random affordable arm instead, so that every arm continues to be observed. The ceilings
+are estimated once from the providers' cached responses to the selection set, which is
+labelled and may be used for this purpose. A label-free alternative, scoring each
+provider by how often it agrees with the other providers, was examined and rejected
+because it favoured the model family that made up most of the pool
+(Chapter~\ref{chap:Evaluation}); this is the conditional-independence assumption of
+\textcite{dawid_skene_1979} failing in practice.
+
+The model makes the hypotheses concrete. A provider $e$ that is more expensive than a
+provider $c$ but has a higher ceiling becomes the better choice once the student's
+accuracy exceeds
+\[
+  \alpha^{*} = \frac{c_e\, \mu_{c,d} - c_c\, \mu_{e,d}}{c_e - c_c},
+\]
+the point at which $(\mu_{e,d} - \alpha)/c_e$ overtakes $(\mu_{c,d} - \alpha)/c_c$.
+Table~\ref{imp:tab:predictions} lists what the model predicts for the pool in
+Table~\ref{imp:tab:pool}. The best arm at the start differs between domains, which is a
+prediction of H1, and each domain has a point at which the best provider changes, which
+is a prediction of H2. The prices and ceilings behind these predictions were fixed
+before any training run, and Chapter~\ref{chap:Evaluation} tests the predictions.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lccl@{}}
+\toprule
+\textbf{Domain} & \textbf{Student at start} & \textbf{Best arm at start} & \textbf{Predicted first switch} \\
+\midrule
+Countdown & 0.195 & Qwen2.5-3B       & to Qwen2.5-7B at $\alpha^{*} = 0.27$ \\
+MATH      & 0.414 & Qwen2.5-3B       & to Qwen2.5-7B at $\alpha^{*} = 0.63$ \\
+Code      & 0.438 & Qwen2.5-Coder-7B & to Phi-4 at $\alpha^{*} = 0.57$ \\
+\bottomrule
+\end{tabular}
+\caption{Predictions of the headroom model for the pool in Table~\ref{imp:tab:pool}.}
+\label{imp:tab:predictions}
+\end{table}
+
+The assumption that progress is proportional to headroom is a modelling choice, not a
+result. It ignores transfer between domains, differences in how easily the student
+absorbs each provider's style, and the student's own capacity. The branching
+measurements of Section~\ref{imp:sec:marginal} provide an independent check of it.
+
+\subsection{Discounted Thompson sampling}
+
+The model-free comparison treats each arm as a bandit arm whose payoff is the learning
+progress it produces per unit of cost, as in automated curriculum learning
+\autocite{graves_curriculum_2017,matiisen_tscl_2017}. After a block on arm $(k, d)$, the
+selector observes
+\[
+  \rho = \frac{1}{D \, C_{\mathrm{blk}}} \sum_{d'=1}^{D}
+         \big(\alpha^{\mathrm{after}}_{d'} - \alpha^{\mathrm{before}}_{d'}\big),
+\]
+where $C_{\mathrm{blk}}$ is what the block cost. This is the average accuracy gain over all
+domains per unit of budget, so that transfer to other domains counts. It keeps a Gaussian posterior for each arm's mean payoff and plays the
+arm with the highest sample, in the spirit of Thompson sampling for budgeted bandits
+\autocite{xia_budgeted_ts_2015}. Because H2 states that payoffs drift as the student
+learns, all past observations are discounted by a factor $\gamma = 0.9$ per block, which
+is the approach of discounted bandits for changing environments
+\autocite{garivier_switching_2008,raj_dts_2017}. The posterior's noise scale is set to
+the spread of the arms' current mean payoffs.
+
+\subsection{Baselines}
+\label{imp:sec:baselines}
+
+\begin{description}[itemsep=3pt,topsep=4pt]
+  \item[Uniform.] Cycles through all $K \times D$ arms in a fixed random order, giving
+    each arm the same number of blocks.
+  \item[Single provider.] Uses one provider for the whole run, cycling through the
+    domains. Run once for each of the five real providers, it covers the
+    strongest-provider-only baseline (Phi-4) and the cheapest-provider-only baseline
+    (Qwen2.5-3B). The best of the five on the selection set serves as the best static
+    allocation in hindsight. This restricts static allocations to a single provider,
+    which Section~\ref{imp:sec:limitations} discusses.
+  \item[Correctness reward without providers.] The same training loop with the
+    agreement reward replaced by ground-truth correctness on the pool, no provider and no
+    cost, run for 200 rounds with domains in rotation. It shows what the student could
+    learn if labels were available, without any teacher.
+  \item[Supervised fine-tuning.] An off-policy baseline. It spends the same budget $B$
+    on provider responses, divided equally over all arms. For each bought prompt it
+    keeps the response that carries the provider's most common answer, a label-free filter
+    in the spirit of self-consistency \autocite{wang_selfconsistency_2023}. It then
+    fine-tunes the same LoRA configuration on these responses for two epochs.
+\end{description}
+
+The greedy oracle listed among the objectives in Section~\ref{sec:Objectives} is
+approximated with the measurements of the next section: at each checkpoint it would
+choose the arm whose measured marginal value is highest. It serves as a reference for
+the selectors' choices rather than as a separate training run.
+
+\section{Measuring Marginal Value}
+\label{imp:sec:marginal}
+
+H1 and H2 concern the marginal value $v(k, d; \theta)$, which is measured directly by
+branching. The uniform-allocation run of each seed provides checkpoints at 25, 50 and
+75\% of its budget, and the untrained student serves as the checkpoint at 0\%. From each checkpoint $\theta_c$, a separate short run trains on a
+single arm $(k, d)$ for $R = 20$ rounds and is then evaluated on the full selection set.
+The estimate of marginal value is
+\[
+  \hat{v}(k, d; \theta_c) =
+  \frac{U(\theta_c^{k,d}) - U(\theta_c)}{\text{budget spent in the branch}},
+\]
+where $\theta_c^{k,d}$ is the student after the branch and $U$ is the mean selection
+accuracy over the three domains. The per-domain change is also recorded. The uniform run
+is used as the source of checkpoints because it visits every arm and therefore favours
+none.
+
+Branches from the same checkpoint and seed share everything except the arm: they start
+from the same adapter and optimiser state, read the same prompt sequence for a given
+domain, and draw student responses with the same random seeds. Differences between two
+providers on the same domain are therefore paired comparisons, which reduces their
+variance. With $K = 6$ providers including the degraded one, $D = 3$ domains, $C = 4$
+checkpoints and $S = 3$ seeds, the design has 216 branches.
+
+H1 is supported if, at a fixed checkpoint, the provider with the highest $\hat{v}$
+differs between domains. H2 is supported if, within a domain, the provider with the
+highest $\hat{v}$ changes between checkpoints. H3 is tested by comparing the final test
+utility of the adaptive selectors with that of the best single-provider run at equal
+budget.
+
+\section{Experimental Configuration}
+\label{imp:sec:config}
+
+Table~\ref{imp:tab:config} lists the settings shared by all runs. Values marked with an
+asterisk were set before the pilot run of Chapter~\ref{chap:Evaluation} and may be
+revised in light of it.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Component} & \textbf{Setting} & \textbf{Value} \\
+\midrule
+Budget         & total budget $B$                         & 2,400 price units \\
+               & prompts per round $b$                    & 8 \\
+               & round cap $T_{\max}$                     & 400 \\
+Rollouts       & responses per prompt $G$                 & 8 \\
+               & temperature, top-$p$                     & 1.0, 1.0 \\
+               & maximum response length                  & 1,024 tokens \\
+Optimisation   & optimiser                                & AdamW, no weight decay \\
+               & learning rate$^{*}$                      & $2 \times 10^{-5}$, constant \\
+               & gradient clipping                        & 1.0 \\
+               & LoRA rank, scaling $\alpha$, dropout     & 16, 32, 0 \\
+Selection      & block length $L$                         & 10 rounds \\
+               & selection subsample per domain           & 128 prompts, greedy decoding \\
+               & exploration (headroom selector)          & 0.1 \\
+               & discount $\gamma$ (Thompson sampling)    & 0.9 \\
+Providers      & cached responses per prompt $m$          & 4 \\
+               & sampling for the cache                   & temperature 0.7, top-$p$ 0.95, 2,048 tokens \\
+Replication    & seeds per condition                      & 3 \\
+\bottomrule
+\end{tabular}
+\caption{Configuration shared by all runs.}
+\label{imp:tab:config}
+\end{table}
+
+\paragraph{Budget.} The budget is set so that the uniform policy, whose average price per
+prompt is the mean price of 1.53, runs for about 200 rounds. At equal budget, cheaper
+providers buy more training steps: a run using only Phi-4 stops after about 103 rounds,
+while a run using only Qwen2.5-3B would be allowed 600 and is stopped by the cap at 400.
+Results are therefore reported both against budget spent and against the number of
+gradient steps, so that a selector's gains can be separated from the extra steps that
+cheap providers buy. Checkpoints are saved when a run's progress, the larger of its
+budget fraction and its round fraction, first reaches 25, 50 and 75\%.
+
+\paragraph{Prompt order.} Each domain's pool is read in a fixed random order per seed, so
+no prompt is repeated until the pool is exhausted. Student responses are drawn with a
+seed derived from the run seed and the round number, which gives common random numbers
+across runs with the same seed.
+
+\paragraph{Ground truth.} \label{imp:sec:groundtruth}Labels enter a run in exactly three
+places: the evaluations on the selection set, the correctness reward of the
+provider-free baseline, and diagnostic quantities written to the log, such as the
+student's accuracy on the pool and the reward given to correct and wrong responses
+($q$ and $\varepsilon$). No decision made during a run reads the diagnostics.
+
+\paragraph{Hardware and software.} Experiments run on a shared server with six NVIDIA
+L40 GPUs of 48\,GB each, without a job scheduler. Jobs wait for an idle GPU and use at
+most two at a time. Each run occupies one GPU, because two runs sharing a GPU were
+measured to be slower in total than the same runs in sequence. Within a run, vLLM
+\autocite{kwon_vllm_2023} generates the student's responses with the current LoRA adapter,
+which is reloaded after every update, and PyTorch with the PEFT library computes the
+update. Scoring runs in parallel worker processes, one per response. In the pilot, a
+round took a median of about 10 seconds on Countdown and 14 seconds on MATH.
+
+\section{Verification of the Testbed}
+\label{imp:sec:verification}
+
+Each component was checked before the main runs.
+
+\begin{description}[itemsep=3pt,topsep=4pt]
+  \item[Answer checkers.] Math-Verify accepted all 300 reference solutions in a sample of
+    MATH problems. In the code domain, only problems whose reference solution passes in
+    the sandbox are used (92.5\% of sampled candidates).
+  \item[Sandbox.] Test programs confirmed that writes outside the working directory fail,
+    network access fails, and infinite loops are stopped by the time limits.
+  \item[Harness rules.] Each rule of Section~\ref{imp:sec:sandbox} was introduced in
+    response to a measured failure and applies to every model. Removing appended
+    self-tests recovered 286 of the base student's screening responses whose own failing
+    test had caused them to be scored as missing answers. Normalising LaTeX in Countdown
+    answers raised Phi-4's screening accuracy from 0.35 to 0.52 and changed no other
+    model's by more than 0.01. Exposing the solution's names to test files that
+    omit their import raised the pass rate of KodCode reference solutions from about 80\%
+    to 92.5\%.
+  \item[Degraded provider.] Its measured ceilings match the per-prompt prediction
+    (Table~\ref{imp:tab:degraded}).
+  \item[Training loop.] Short end-to-end runs confirmed budget accounting, the pre-query
+    filter, checkpointing, resumption of a branch from a checkpoint, and the provider-free
+    baseline. In the selector tests, the headroom selector moved from Qwen2.5-3B on MATH to
+    Phi-4 on code as the simulated student accuracy rose, and Thompson sampling learned to
+    prefer the arm with the highest simulated payoff.
+\end{description}
+
+\section{Limitations of the Design}
+\label{imp:sec:limitations}
+
+\begin{description}[itemsep=3pt,topsep=4pt]
+  \item[Cached responses.] Each provider has four responses per prompt, generated once.
+    The student is thus trained against a fixed sample of each provider's behaviour, and
+    live querying would add variation that is not modelled.
+  \item[Prices.] Prices are a compute-based proxy measured on one type of GPU with one
+    serving system. Real API prices differ, and the switch points of
+    Table~\ref{imp:tab:predictions} depend on price ratios.
+  \item[Model families.] Three of the five real providers and the student are from the
+    Qwen family. Phi-4-mini was added to separate family from price, but the pool remains
+    unbalanced.
+  \item[Agreement in the code domain.] Canonical answers for code are the function's
+    outputs on the test inputs. For KodCode, outputs are recorded up to the first failing
+    assertion in each test function, so the expected outputs influence which calls are
+    recorded, although not the values compared.
+  \item[Degraded provider.] Corrupted code answers change the function's return values.
+    For about 5\% of corrupted code prompts this does not change the tested behaviour, so
+    the corruption is slightly weaker in that domain.
+  \item[Static allocations.] The best static allocation in hindsight is taken over
+    single-provider runs only. A static mixture of providers chosen per domain could do
+    better and is not searched.
+  \item[The headroom model.] Its assumption that progress is proportional to headroom is
+    a simplification, and the branching measurements are the test of whether it holds.
+  \item[Scale.] There is one student of 1.5B parameters, three domains and three seeds
+    per condition, chosen to fit the available compute.
+\end{description}
