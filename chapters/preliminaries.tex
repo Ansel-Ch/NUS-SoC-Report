@@ -19,8 +19,8 @@ provider is characterised by its access mode, its per-query price $c_k$ and its
 unknown competence on each domain.
 \end{Definitions}
 
-The term \emph{provider} is used in place of the federated learning term
-\emph{client}. In conventional federated learning a client holds data and trains a
+The term provider is used in place of the federated learning term
+client. In conventional federated learning a client holds data and trains a
 copy of a shared model \autocite{mcmahan_fedavg_2017}; here a provider holds a model
 and is never asked to train anything. The two settings share the constraint that the
 data behind each party stays with that party.
@@ -31,9 +31,9 @@ the student vocabulary $\mathcal{V}_S$ and a provider vocabulary $\mathcal{V}_k$
 differ and their next-token distributions are not defined over a common support.
 
 \begin{Definitions}[White-box and black-box access]
-A provider is \emph{white-box accessible} if, for any context $c$, its next-token
+A provider is white-box accessible if, for any context $c$, its next-token
 distribution $p_k(\cdot \mid c)$ over $\mathcal{V}_k$ can be read. It is
-\emph{black-box accessible} if it can be queried only as a sampling oracle: given a
+black-box accessible if it can be queried only as a sampling oracle: given a
 text prompt $c$, it returns generated text $y \sim M_k(\cdot \mid c)$, and neither its
 logits, its vocabulary, nor its tokenizer are observable.
 \end{Definitions}
@@ -43,8 +43,8 @@ happen to be public. Under black-box access the student and a provider interact 
 through text, and the cross-tokenizer problem does not arise.
 
 \begin{Definitions}[Query and cost]
-A \emph{query} is a single prompt sent to one provider together with the response it
-returns. A query to $M_k$ costs $c_k$, and a training run is \emph{budget-feasible} if
+A query is a single prompt sent to one provider together with the response it
+returns. A query to $M_k$ costs $c_k$, and a training run is budget-feasible if
 the total cost of its queries does not exceed $B$. Queries issued to a fixed local
 model that is not a provider, such as a verifier, are not charged against $B$ but are
 reported separately.
@@ -53,7 +53,7 @@ reported separately.
 \subsection{On-Policy Distillation}
 
 \begin{Definitions}[Off-policy and on-policy distillation]
-In \emph{off-policy} distillation the student is trained on responses sampled from a
+In off-policy distillation the student is trained on responses sampled from a
 teacher. Supervised fine-tuning (SFT) on provider responses is the standard instance,
 minimising
 \[
@@ -61,7 +61,7 @@ minimising
   -\,\mathbb{E}_{x \sim \mathcal{X}_d,\; y \sim M_k(\cdot \mid x)}
   \big[ \log \pi_\theta(y \mid x) \big].
 \]
-In \emph{on-policy} distillation the responses are sampled from the student itself,
+In on-policy distillation the responses are sampled from the student itself,
 $y \sim \pi_\theta(\cdot \mid x)$, and the teacher supplies supervision on the
 sequences that the student actually produces.
 \end{Definitions}
@@ -69,9 +69,9 @@ sequences that the student actually produces.
 Off-policy training optimises the student only on the distribution of sequences that
 the teacher produces. At inference time the student conditions on its own earlier
 tokens, and a small deviation places it in contexts absent from its training data,
-where further errors become more likely. This mismatch is termed \emph{exposure bias},
-and the resulting growth of error with sequence length is termed \emph{compounding
-error}. On-policy distillation removes the mismatch by construction.
+where further errors become more likely. This mismatch is termed exposure bias,
+and the resulting growth of error with sequence length is termed compounding
+error. On-policy distillation removes the mismatch by construction.
 
 \begin{Definitions}[Divergences]
 For distributions $p$ and $q$ over a common support, the Kullback--Leibler (KL)
@@ -80,8 +80,8 @@ divergence is
   D_{\mathrm{KL}}(p \,\|\, q) = \sum_{v} p(v) \log \frac{p(v)}{q(v)}.
 \]
 With the student as $p$ and a white-box teacher as $q$,
-$D_{\mathrm{KL}}(\pi_\theta \,\|\, p_{\mathcal{T}})$ is termed the \emph{reverse} KL
-and $D_{\mathrm{KL}}(p_{\mathcal{T}} \,\|\, \pi_\theta)$ the \emph{forward} KL.
+$D_{\mathrm{KL}}(\pi_\theta \,\|\, p_{\mathcal{T}})$ is termed the reverse KL
+and $D_{\mathrm{KL}}(p_{\mathcal{T}} \,\|\, \pi_\theta)$ the forward KL.
 \end{Definitions}
 
 Logit-based on-policy distillation minimises a per-token divergence of this kind along
@@ -91,7 +91,7 @@ scalar reward derived from the provider's text, which is then optimised by polic
 gradient.
 
 \begin{Definitions}[Black-box on-policy distillation]
-A \emph{black-box on-policy update} samples $n$ student rollouts
+A black-box on-policy update samples $n$ student rollouts
 $\{y_i\}_{i=1}^{n} \sim \pi_\theta(\cdot \mid x)$ for a prompt $x$, obtains $m$
 reference responses $\{y^{(k)}_j\}_{j=1}^{m} \sim M_k(\cdot \mid x)$ from a provider,
 assigns each rollout a reward
@@ -148,9 +148,9 @@ uniform rewards on a domain therefore teaches nothing there, however strong it i
 \subsection{Selection}
 
 \begin{Definitions}[Arm, round and selector]
-An \emph{arm} is a provider--domain pair $a = (k, d)$. In each \emph{round} $t$ the
+An arm is a provider--domain pair $a = (k, d)$. In each round $t$ the
 selector chooses an arm $a_t$, a batch of prompts from $\mathcal{X}_{d_t}$ is answered
-by $M_{k_t}$, and the student is updated on the result. A \emph{selector} is a policy
+by $M_{k_t}$, and the student is updated on the result. A selector is a policy
 $\pi_{\mathrm{sel}}$ that maps the history of contexts, arms and rewards to the next
 arm.
 \end{Definitions}
@@ -159,21 +159,21 @@ arm.
 The marginal value of arm $(k, d)$ at student state $\theta$ is the expected gain in
 utility per unit cost from one round on that arm,
 $v(k, d; \theta)$, as defined in Section~\ref{sec:Problem Statement}. An arm is
-\emph{dominant} at $\theta$ if its marginal value is at least that of every other arm.
+dominant at $\theta$ if its marginal value is at least that of every other arm.
 \end{Definitions}
 
 \begin{Definitions}[Static and adaptive allocation]
-A \emph{static allocation} fixes, before training, the fraction of the budget spent
-on each arm, and draws arms in proportion. An \emph{adaptive allocation} chooses each
-arm using rewards observed during the same run. The \emph{best static allocation in
-hindsight} is the static allocation that attains the highest final utility among a
+A static allocation fixes, before training, the fraction of the budget spent
+on each arm, and draws arms in proportion. An adaptive allocation chooses each
+arm using rewards observed during the same run. The best static allocation in
+hindsight is the static allocation that attains the highest final utility among a
 fixed candidate set, chosen after all candidates have been run.
 \end{Definitions}
 
 \begin{Definitions}[Reward signal]
-The \emph{selection reward} $r_t$ is the scalar fed back to the selector after round
-$t$. It is \emph{utility-based} if it is the change in utility on the selection set,
-$U_{\mathrm{sel}}(\theta_t) - U_{\mathrm{sel}}(\theta_{t-1})$, and a \emph{proxy}
+The selection reward $r_t$ is the scalar fed back to the selector after round
+$t$. It is utility-based if it is the change in utility on the selection set,
+$U_{\mathrm{sel}}(\theta_t) - U_{\mathrm{sel}}(\theta_{t-1})$, and a proxy
 otherwise, for instance the reduction in training loss or a measure of disagreement
 between student and provider.
 \end{Definitions}
@@ -260,8 +260,8 @@ federated method closest to the motivation of this thesis. A filter trained duri
 distillation predicts which reasoning samples are learnable for each client's small
 model and allocates samples accordingly, and the study finds that a larger server
 model does not necessarily yield a better client model \autocite{guo_lada_2026}.
-LaDA adapts \emph{which samples} a student receives as the student changes, but each
-client learns from a single server model, so the question of \emph{which teacher} to
+LaDA adapts which samples a student receives as the student changes, but each
+client learns from a single server model, so the question of which teacher to
 consult does not arise.
 
 Federated work on agents remains in-context rather than parametric. FICAL exchanges
@@ -426,9 +426,9 @@ Online Data Mixing \autocite{albalak_odm_2023} & n/a & -- & \checkmark & -- & \c
 \hline
 \end{tabular}}
 \caption{Positioning of related methods against the properties of
-provider-selective on-policy distillation. \emph{Hetero.}: the student can draw on
-more than one source of differing competence. \emph{Costly}: sources carry a
-per-query price under a budget. \emph{State-dep.}: what the student is given is
+provider-selective on-policy distillation. Hetero.: the student can draw on
+more than one source of differing competence. Costly: sources carry a
+per-query price under a budget. State-dep.: what the student is given is
 revised from the student's progress during training. LaDA and Online Data Mixing
 adapt during training, but over samples or datasets rather than over teachers.}
 \label{tab:lr-gap}
