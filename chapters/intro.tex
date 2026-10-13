@@ -155,8 +155,9 @@ training is sufficient.
 There is a single student. Providers are honest, though they may be noisy or of low
 quality; they do not act strategically. Provider responses to the prompt pool may be
 generated once and cached, so that querying is simulated without repeated inference.
-The student is updated by supervised fine-tuning on returned responses, with a
-preference-based update considered as a variant.
+The student is updated by black-box on-policy distillation: it is trained on its own
+rollouts, with rewards derived from the returned responses. Supervised fine-tuning on
+the same responses serves as the off-policy baseline.
 
 \section{Objectives and Scope}
 \label{sec:Objectives}

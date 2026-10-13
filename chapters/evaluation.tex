@@ -1,27 +1,251 @@
 \chapter{Evaluation}
 \label{chap:Evaluation}
 
+% \TBD is defined in implementation.tex; redefined here only if this chapter is
+% compiled on its own.
+\providecommand{\TBD}[1][]{\textcolor{red}{[TBD\if\relax\detokenize{#1}\relax\else: #1\fi]}}
+\providecommand{\placeholderfig}[1]{%
+  \fbox{\parbox[c][4.5cm][c]{0.85\linewidth}{\centering\small\color{red} #1}}}
+
+This chapter reports six experiments. The first motivates the black-box assumption.
+The next three test hypotheses H1 to H3 of Section~\ref{sec:Problem Statement} in
+order, since each is worth testing only if the previous one holds. The last two
+analyse the selection rewards and the allocations that the selectors learn. For each
+hypothesis the decision rule is stated before the results.
+
 \section{Hardware}
 \label{sec:Hardware}
+
+\TBD[GPU model and count, cluster and scheduler, inference server used for providers,
+total GPU-hours]
 
 \section{Experimental Setup}
 \label{sec:Experimental Setup}
 
-\section{Results}
-\label{sec:Results}
+\paragraph{Metrics.} The primary metric is test utility $U(\theta_\tau)$, the
+weighted mean of per-domain test accuracy, with equal domain weights unless stated.
+Every result is reported together with the budget spent and the number of
+uncharged verifier calls. Where students of different capacity are compared, the
+teacher-gap recovery
+\[
+  R = \frac{\mathrm{Acc}_{\mathrm{method}} - \mathrm{Acc}_{\mathrm{base}}}
+           {\mathrm{Acc}_{\mathrm{teacher}} - \mathrm{Acc}_{\mathrm{base}}}
+\]
+normalises away the student's starting point.
 
-\begin{table}[htbp]
+\paragraph{Budgets.} Each selector is run at three budgets $B \in \{\TBD, \TBD, \TBD\}$,
+chosen so that the smallest allows roughly \TBD rounds with the strongest provider
+alone.
+
+\paragraph{Seeds and uncertainty.} Every configuration is run with \TBD[$\ge 3$]
+seeds. Intervals are 95\% bootstrap intervals over seeds and test items. Selectors
+are compared by paired differences on the same seeds and test items.
+
+\section{Motivating Experiment: The Cost of Cross-Tokenizer Supervision}
+\label{eval:sec:Motivating}
+
+\paragraph{Question.} How much of the teacher--student gap does white-box on-policy
+distillation recover when teacher and student do not share a tokenizer, and why?
+The answer determines whether the black-box assumption gives anything up.
+
+\paragraph{Setup.} The teacher is Qwen3-4B-Instruct. Students are Qwen2.5-1.5B-Instruct,
+which shares the teacher's tokenizer, OLMo-2-1B, with vocabulary overlap 0.65, and
+SmolLM2-1.7B, with overlap 0.24. All runs start from each student's SFT checkpoint
+on verified teacher completions and train on Countdown with the same trainer and
+step count; only the loss and the student change.
+
+\begin{table}[H]
 \centering
-\begin{tabular}{|c|c|c|}
+\begin{tabular}{|c|l|l|c|c|}
 \hline
-ID & Name & Score \\
+\textbf{ID} & \textbf{Student} & \textbf{Method} & \textbf{Test acc.} & $R$ \\
 \hline
-1 & Alice & 88 \\
-2 & Bob & 92 \\
-3 & Carol & 85 \\
+B1 & each & SFT on teacher completions & \TBD & 0 \\
+T  & teacher & -- & \TBD & 1 \\
+G1 & Qwen2.5-1.5B & GKD, exact logits & \TBD & \TBD \\
+G2 & Qwen2.5-1.5B & ULD only, same tokenizer & \TBD & \TBD \\
+X1 & OLMo-2-1B & GOLD hybrid & \TBD & \TBD \\
+X2 & SmolLM2-1.7B & GOLD hybrid & \TBD & \TBD \\
 \hline
 \end{tabular}
-\caption{Example of a simple table.}
-\label{eval:table:example}
+\caption{Countdown test accuracy and teacher-gap recovery for same-tokenizer and
+cross-tokenizer on-policy distillation.}
+\label{eval:tab:motivating}
 \end{table}
+
+\paragraph{Result.} \TBD[report $R$ for G1 versus X1 and X2, the G1--G2 gap as the cost
+of the loss approximation alone, and the diagnostics that support each failure mode]
+
+\section{Experiment 1: Non-Dominance (H1)}
+\label{eval:sec:H1}
+
+\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
+  innerbottommargin=6pt]
+\textbf{Decision rule.} H1 is supported if, at $\theta^{(0)}$, there are two domains
+$d \ne d'$ whose arms of highest estimated marginal value belong to different
+providers, and in each the leading arm's 95\% interval lies above that of the other
+provider's arm.
+\end{mdframed}
+
+\paragraph{Protocol.} Marginal values $\hat v(k, d; \theta^{(0)})$ are estimated by
+branching from the initial student, as in Section~\ref{imp:sec:Marginal}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Provider} & \textbf{Countdown} & \textbf{Math} & \textbf{Code} \\
+\hline
+$M_1$ strong generalist & \TBD & \TBD & \TBD \\
+$M_2$ math specialist   & \TBD & \TBD & \TBD \\
+$M_3$ code specialist   & \TBD & \TBD & \TBD \\
+$M_4$ small generalist  & \TBD & \TBD & \TBD \\
+$M_5$ degraded          & \TBD & \TBD & \TBD \\
+\hline
+\end{tabular}
+\caption{Estimated marginal value $\hat v(k, d; \theta^{(0)})$, in utility points per
+unit cost, with 95\% intervals. Bold marks the best provider in each domain.}
+\label{eval:tab:h1}
+\end{table}
+
+A second table reports the same quantities without dividing by cost, to separate a
+provider that is most useful from one that is most useful per unit of budget.
+
+\paragraph{Result.} \TBD
+
+\section{Experiment 2: State Dependence (H2)}
+\label{eval:sec:H2}
+
+\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
+  innerbottommargin=6pt]
+\textbf{Decision rule.} H2 is supported in domain $d$ if the provider of highest
+estimated marginal value at some checkpoint $\theta^{(c)}$ differs from that at
+$\theta^{(0)}$, with non-overlapping 95\% intervals between the two providers at
+$\theta^{(c)}$. H2 is supported overall if it holds in at least one domain under
+the on-policy update.
+\end{mdframed}
+
+\paragraph{Protocol.} The branching of Section~\ref{imp:sec:Marginal} is repeated at
+each checkpoint $\theta^{(1)}, \dots, \theta^{(C)}$. Rank stability is summarised by
+Kendall's $\tau$ between the provider rankings at consecutive checkpoints in each
+domain.
+
+\begin{figure}[H]
+\centering
+\placeholderfig{Placeholder: one panel per domain; $x$-axis checkpoint (budget
+spent); $y$-axis $\hat v(k, d; \theta^{(c)})$ with intervals; one line per provider.
+A crossing of lines is a change of the dominant provider.}
+\caption{Marginal value of each provider across training, per domain.}
+\label{eval:fig:h2}
+\end{figure}
+
+\paragraph{Result.} \TBD
+
+\paragraph{If H2 fails.} A negative result shows that a single allocation fixed
+before training suffices on these tasks. Experiment~3 is then reported only to
+confirm that adaptive selectors do no better than the best static allocation.
+
+\section{Experiment 3: Does Adaptivity Pay? (H3)}
+\label{eval:sec:H3}
+
+\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
+  innerbottommargin=6pt]
+\textbf{Decision rule.} H3 is supported if, at some budget, the best deployable
+adaptive selector exceeds the best static allocation in hindsight, with the 95\%
+interval of the paired difference above zero.
+\end{mdframed}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Selector} & $B_{\mathrm{low}}$ & $B_{\mathrm{mid}}$ & $B_{\mathrm{high}}$ \\
+\hline
+Uniform                    & \TBD & \TBD & \TBD \\
+Strongest-only             & \TBD & \TBD & \TBD \\
+Cheapest-only              & \TBD & \TBD & \TBD \\
+Best static in hindsight   & \TBD & \TBD & \TBD \\
+\hline
+Cost-aware EXP3            & \TBD & \TBD & \TBD \\
+Sliding-window UCB         & \TBD & \TBD & \TBD \\
+Contextual (LinUCB)        & \TBD & \TBD & \TBD \\
+\hline
+Greedy oracle              & \TBD & \TBD & \TBD \\
+\hline
+\end{tabular}
+\caption{Test utility at each budget under the on-policy update, mean and 95\%
+interval over seeds. A second table reports the same under the SFT update.}
+\label{eval:tab:h3}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\placeholderfig{Placeholder: test utility (y) against budget spent (x), one line per
+selector, shaded intervals.}
+\caption{Utility as a function of budget spent.}
+\label{eval:fig:h3}
+\end{figure}
+
+\paragraph{Result.} \TBD
+
+\section{Experiment 4: Selection Rewards}
+\label{eval:sec:Rewards}
+
+\paragraph{Question.} Can the cheap proxies of Table~\ref{imp:tab:rewards} stand in for
+utility gain, which requires an evaluation pass every round?
+
+\paragraph{Protocol.} On the branches of Experiment~2, the rank correlation between
+each proxy and the measured utility gain is computed per domain. The best adaptive
+selector from Experiment~3 is then rerun with each proxy in place of utility gain.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Selection reward} & \textbf{Spearman $\rho$ with utility gain}
+  & \textbf{Final utility} & \textbf{Extra compute} \\
+\hline
+Utility gain   & 1 & \TBD & \TBD \\
+Loss decrease  & \TBD & \TBD & \TBD \\
+Learnability   & \TBD & \TBD & \TBD \\
+Signal density & \TBD & \TBD & \TBD \\
+\hline
+\end{tabular}
+\caption{Agreement of each selection reward with utility gain, and the final utility
+a selector reaches when driven by it.}
+\label{eval:tab:rewards}
+\end{table}
+
+\paragraph{Result.} \TBD
+
+\section{Experiment 5: Allocation Analysis and Robustness}
+\label{eval:sec:Allocation}
+
+\paragraph{Question.} Where does each selector spend its budget, does that spending
+track each provider's contribution, and does the selector learn to avoid the degraded
+provider?
+
+\paragraph{Protocol.} For each selector, the share of budget spent on each provider is
+compared with a post hoc valuation of that provider's contribution to final utility
+\autocite{sim_cml_2020}, computed by \TBD[leave-one-provider-out retraining, or a
+sampled Shapley estimate over provider subsets]. The fraction of budget spent on the
+degraded provider is tracked over time, and the degraded provider's corruption rate
+$p$ is varied over \TBD.
+
+\begin{figure}[H]
+\centering
+\placeholderfig{Placeholder: left, stacked area of budget share per provider over
+rounds for the best adaptive selector; right, budget share against post hoc value,
+one point per provider, with the identity line.}
+\caption{Budget allocation over training and its relation to provider value.}
+\label{eval:fig:allocation}
+\end{figure}
+
+\paragraph{Result.} \TBD
+
+\section{Summary of Findings}
+\label{eval:sec:Summary}
+
+\TBD[one paragraph per hypothesis: supported or not, by how much, and under which
+update rule]
 
