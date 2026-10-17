@@ -828,8 +828,9 @@ most two at a time. Each run occupies one GPU, because two runs sharing a GPU we
 measured to be slower in total than the same runs in sequence. Within a run, vLLM
 \autocite{kwon_vllm_2023} generates the student's responses with the current LoRA adapter,
 which is reloaded after every update, and PyTorch with the PEFT library computes the
-update. Scoring runs in parallel worker processes, one per response. In the pilot, a
-round took a median of about 10 seconds on Countdown and 14 seconds on MATH.
+update. Scoring runs in parallel worker processes, one per response. Over the pilot of
+Section~\ref{eval:sec:Pilot}, a round took a median of 11 seconds on Countdown, 14 on code
+and 15 on MATH.
 
 \section{Data Boundaries}
 \label{imp:sec:Boundaries}

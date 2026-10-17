@@ -11,7 +11,9 @@ This chapter reports six experiments. The first motivates the black-box assumpti
 The next three test hypotheses H1 to H3 of Section~\ref{sec:Problem Statement} in
 order, since each is worth testing only if the previous one holds. The last two
 analyse the selection rewards and the allocations that the selectors learn. For each
-hypothesis the decision rule is stated before the results.
+hypothesis the decision rule is stated before the results. Before these, a pilot run with
+one seed, reported in Section~\ref{eval:sec:Pilot}, tested the pipeline and identified the
+revisions needed for the main runs.
 
 \section{Hardware}
 \label{sec:Hardware}
@@ -21,7 +23,8 @@ two AMD EPYC 7763 processors and 1\,TB of memory, without a job scheduler. Jobs 
 an idle GPU, use at most two GPUs at a time and one GPU per run. Providers and the
 student's rollouts are served with vLLM, and training uses PyTorch with the PEFT library
 (Section~\ref{imp:sec:config}). Screening the candidate providers took 3.0 GPU-hours and
-building the response cache 8.1 GPU-hours. The motivating experiment of
+building the response cache 8.1 GPU-hours, and the pilot run of
+Section~\ref{eval:sec:Pilot} 14.4 GPU-hours. The motivating experiment of
 Section~\ref{eval:sec:Motivating} runs on the School of Computing's Slurm cluster, on
 NVIDIA A100 and H100 GPUs. \TBD[total GPU-hours once the experiments are complete]
 
@@ -41,12 +44,175 @@ teacher-gap recovery
 normalises away the student's starting point.
 
 \paragraph{Budgets.} Each selector is run at three budgets $B \in \{\TBD, \TBD, \TBD\}$,
-chosen so that the smallest allows roughly \TBD rounds with the strongest provider
+chosen so that the smallest allows roughly \TBD\ rounds with the strongest provider
 alone.
 
 \paragraph{Seeds and uncertainty.} Every configuration is run with \TBD[$\ge 3$]
 seeds. Intervals are 95\% bootstrap intervals over seeds and test items. Selectors
 are compared by paired differences on the same seeds and test items.
+
+\section{Pilot Run}
+\label{eval:sec:Pilot}
+
+Before the main experiments, every condition was run once, with seed 0 and the single
+budget $B = 2{,}400$, to test the pipeline end to end and to check the design against
+real training. The pilot comprised the five single-provider runs, uniform allocation,
+the headroom selector, discounted Thompson sampling, the provider-free correctness
+control and the SFT baseline, together with an evaluation of the untrained student. All
+eleven jobs completed, using 14.4 GPU-hours. Each final student was evaluated greedily
+on the 500-problem test set of every domain.
+
+With one seed, these results describe what happened rather than test the hypotheses.
+Each mean in Table~\ref{eval:tab:pilot} is an accuracy over 1,500 test problems, with a
+standard error of about 0.013, so differences in mean below about 0.03 are not
+distinguishable. The decision rules of Sections~\ref{eval:sec:H1} to~\ref{eval:sec:H3}
+are not applied here.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lrrcccc@{}}
+\toprule
+ & & & \multicolumn{4}{c}{\textbf{Test accuracy}} \\
+\cmidrule(l){4-7}
+\textbf{Condition} & \textbf{Rounds} & \textbf{Spent} & \textbf{Countdown} & \textbf{MATH} &
+  \textbf{Code} & \textbf{Mean} \\
+\midrule
+Untrained student            & --  & --    & 0.218 & 0.434 & 0.336 & 0.329 \\
+\midrule
+Qwen2.5-3B only              & 400 & 1,380 & 0.682 & 0.426 & 0.368 & 0.492 \\
+Phi-4-mini only              & 400 & 2,057 & 0.714 & 0.440 & 0.350 & 0.501 \\
+Qwen2.5-7B only              & 353 & 2,397 & 0.694 & 0.426 & 0.352 & 0.491 \\
+Qwen2.5-Coder-7B only        & 394 & 2,392 & 0.304 & 0.456 & 0.350 & 0.370 \\
+Phi-4 only                   & 109 & 2,377 & 0.508 & 0.424 & 0.336 & 0.423 \\
+\midrule
+Uniform                      & 217 & 2,397 & 0.604 & 0.434 & 0.338 & 0.459 \\
+Headroom per cost            & 400 & 1,798 & 0.584 & 0.476 & 0.338 & 0.466 \\
+Discounted Thompson sampling & 185 & 2,399 & 0.504 & 0.428 & 0.358 & 0.430 \\
+\midrule
+Correctness reward, no provider & 200 & -- & 0.560 & 0.440 & 0.376 & 0.459 \\
+SFT on provider responses    & --  & 2,384 & 0.378 & 0.432 & 0.328 & 0.379 \\
+\bottomrule
+\end{tabular}
+\caption[Pilot results]{Pilot results with one seed. Rounds are GRPO steps; runs that
+reached the cap of 400 rounds stopped before spending the whole budget. Spent is in
+price units; the pre-query filter leaves skipped prompts uncharged.}
+\label{eval:tab:pilot}
+\end{table}
+
+\paragraph{Learning happened almost only on Countdown.} Every on-policy run raised
+Countdown accuracy, from 0.218 to as much as 0.714. On MATH and code, no condition moved
+test accuracy by more than 0.042 from the untrained student, which is within about 1.3
+standard errors. The training logs show why. During training the student's sampled
+accuracy on pool prompts did rise, from about 0.37 to 0.43--0.48 on MATH and from about
+0.23 to 0.32--0.36 on code in the four single-provider runs that spent more than 100
+rounds on each domain, but only to roughly the level of its existing greedy accuracy
+(0.47 on MATH and 0.40 on code on the selection set). The
+updates made the student's sampling more consistent with what it already answered
+greedily, rather than teaching it to solve new problems. On Countdown, by contrast,
+sampled accuracy rose from about 0.1 to 0.6--0.7 under Qwen2.5-3B, Phi-4-mini and
+Qwen2.5-7B, and greedy accuracy followed. At this
+scale of training, the selection signal on MATH and code is therefore close to zero for
+every arm, and H1 and H2 can only be observed on Countdown.
+\TBD[decide whether to strengthen learning on MATH and code before the main runs, for
+example with a higher learning rate or more rounds per domain]
+
+\paragraph{Providers differ in how fast they teach Countdown.}
+Figure~\ref{eval:fig:pilot-countdown} follows Countdown accuracy in the single-provider
+runs. Per round, Phi-4-mini taught fastest, reaching 0.71 after 100 Countdown rounds,
+against 0.60 for Qwen2.5-7B and 0.51 for Qwen2.5-3B. Per unit of budget the ordering
+changed as spending grew: Qwen2.5-3B led up to about 200 price units, and Phi-4-mini was
+ahead by 400 (0.62 against 0.53). This is the shape that H1 and H2 describe, but here it
+is confounded by the rotation between domains and rests on one seed; the branch
+measurements of Section~\ref{eval:sec:H2} are the test. Phi-4 could afford only about 40
+Countdown rounds within the budget. The provider-free control, rewarded with ground-truth
+correctness, reached 0.54 on the selection subsample after 60 Countdown rounds, against 0.55 for Phi-4-mini and 0.46
+for Qwen2.5-3B, so on this task agreement with a provider was about as useful as the
+true labels.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{pilot_countdown_learning.pdf}
+\caption[Countdown accuracy in the single-provider pilot runs]{Countdown accuracy in the
+single-provider pilot runs, against the number of Countdown rounds (left) and the budget
+spent on Countdown (right). Accuracy is measured greedily on the 128-problem selection
+subsample after each block, so single points carry a standard error of about 0.04.}
+\label{eval:fig:pilot-countdown}
+\end{figure}
+
+\paragraph{One provider made the student collapse.} Under Qwen2.5-Coder-7B, the
+student's Countdown responses shrank from about 235 tokens of reasoning to about 20
+tokens, a bare answer, within about 40 Countdown rounds, and its Countdown accuracy on
+the selection subsample stayed below 0.3. No other run showed this: in every other run
+the student's Countdown responses ended between 445 and 584 tokens long. The cause is not
+yet clear. Invalid provider answers alone do not explain it, since 64\% of
+Qwen2.5-Coder-7B's cached Countdown responses contain no valid answer, against a similar
+66\% for Phi-4-mini, which caused no collapse. A provider can therefore harm the student,
+not merely help it less.
+\TBD[investigate the cause of the collapse, and whether it recurs with other seeds]
+
+\paragraph{The headroom selector made the predicted switch, then stalled on MATH.}
+Figure~\ref{eval:fig:pilot-headroom} shows its run. It began with Qwen2.5-3B on Countdown,
+as Table~\ref{imp:tab:predictions} predicts. Countdown accuracy reached 0.297 after round
+40, just past the predicted switch point of 0.27, and from round 41 the selector moved to
+Qwen2.5-7B. It then turned to Qwen2.5-3B on MATH and spent 320 of its 400 rounds there.
+MATH accuracy did not rise, so the headroom on MATH never shrank and the selector rarely
+left. Countdown, the domain that was learning, received only 60 rounds. When MATH
+accuracy briefly reached 0.48 around round 120, its headroom fell far enough for
+Qwen2.5-7B on Countdown to win twice, and those two blocks raised Countdown accuracy from
+0.40 to 0.52. Its two blocks with the degraded provider (rounds 11--20 and 161--170)
+were random exploration: at Phi-4's price and with a lower ceiling, the degraded provider
+never has the highest value. The run reached the round cap having spent 1,798 of its 2,400 units.
+The assumption that progress is proportional to headroom
+(Section~\ref{imp:sec:headroom}) fails when a domain has headroom but no learnability, and
+the selector has no feedback from realised gains to correct it.
+\TBD[revise the selector, for example by scaling each arm's headroom by an online
+estimate of the progress it actually produces]
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{pilot_headroom_timeline.pdf}
+\caption[The headroom selector in the pilot]{The headroom selector in the pilot.
+Top: greedy accuracy on the selection subsample per domain. Bottom: the arm chosen in
+each block of ten rounds, coloured by provider.}
+\label{eval:fig:pilot-headroom}
+\end{figure}
+
+\paragraph{Thompson sampling chased noise and favoured expensive arms.} It spent 1,326
+of its 2,399 units, 55\%, on the degraded provider. Two causes are visible in its log.
+First, it had only 20 blocks in which to learn about 18 arms. Second, every block's
+measured gain lay between $-0.023$ and $+0.029$, which is within the noise of comparing
+two evaluations on 128 problems per domain (about $\pm 0.035$). Dividing such noisy gains
+by cost magnifies the noise of cheap arms and shrinks that of expensive ones towards
+zero: a block of Qwen2.5-3B on MATH costing 34 units scored $-0.69$ per thousand units,
+while blocks of the degraded provider costing about 210 units scored between $-0.07$
+and $+0.14$. With
+gains this small, cost normalisation biases the selector towards expensive arms whatever
+their value.
+\TBD[revise the payoff estimate and the evaluation size before the main runs]
+
+\paragraph{Uniform allocation spent most of its budget on the expensive providers.}
+Because it gives every arm the same number of blocks, 1,582 of its 2,397 units (66\%) went
+to Phi-4 and its degraded copy, which explains why it trailed the cheap single-provider
+runs despite visiting every arm.
+
+\paragraph{Off-policy fine-tuning helped least.} SFT on provider responses, bought with
+the same budget, reached 0.378 on Countdown against 0.604 for the on-policy uniform
+allocation, and did not improve MATH or code.
+
+\paragraph{The pre-query filter saved 15.7\% of queries.} Across all runs, 15.7\% of the
+prompts drawn for training were skipped before the provider was consulted, from 6.7\% in
+the Phi-4 run to 23.5\% in the Phi-4-mini run. It was highest in the runs where the
+student's answers had converged most, on Countdown under Phi-4-mini and in the collapsed
+Qwen2.5-Coder-7B run.
+
+\paragraph{What the pilot implies for the hypotheses.} With one seed, no adaptive
+selector beat the best single provider: the headroom selector reached a mean of 0.466 and
+Thompson sampling 0.430, against 0.501 for Phi-4-mini alone. This is not a test of H3,
+because both selectors showed design flaws that are fixable before the main runs. The
+pilot does show that the best provider for a domain can differ from the most capable
+one, and that the most cost-effective provider can change as the student learns, which is
+the premise of H1 and H2.
 
 \section{Motivating Experiment: The Cost of Cross-Tokenizer Supervision}
 \label{eval:sec:Motivating}
