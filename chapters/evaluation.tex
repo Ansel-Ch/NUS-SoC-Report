@@ -47,8 +47,8 @@ normalises away the student's starting point.
 chosen so that the smallest allows roughly \TBD\ rounds with the strongest provider
 alone.
 
-\paragraph{Seeds and uncertainty.} Every configuration is run with \TBD[$\ge 3$]
-seeds. Intervals are 95\% bootstrap intervals over seeds and test items. Selectors
+\paragraph{Seeds and uncertainty.} Every configuration is run with three seeds (0, 1
+and 2). Intervals are 95\% bootstrap intervals over seeds and test items. Selectors
 are compared by paired differences on the same seeds and test items.
 
 \section{Pilot Run}
@@ -113,9 +113,14 @@ greedily, rather than teaching it to solve new problems. On Countdown, by contra
 sampled accuracy rose from about 0.1 to 0.6--0.7 under Qwen2.5-3B, Phi-4-mini and
 Qwen2.5-7B, and greedy accuracy followed. At this
 scale of training, the selection signal on MATH and code is therefore close to zero for
-every arm, and H1 and H2 can only be observed on Countdown.
-\TBD[decide whether to strengthen learning on MATH and code before the main runs, for
-example with a higher learning rate or more rounds per domain]
+every arm, and H1 and H2 can only be observed on Countdown. A follow-up check trained
+on each domain alone for 60 rounds with Qwen2.5-7B, at the pilot's learning rate and at
+five times that rate. The higher rate did not help on MATH ($-0.014$ against $+0.022$ on
+the selection set) or code ($+0.000$ against $+0.010$), cut the gain on Countdown from
+$+0.280$ to $+0.098$, and shortened the student's Countdown responses from 361 to 169
+tokens. The learning rate therefore stays at $2 \times 10^{-5}$, and MATH and code are kept
+as domains in which the student learns little at this scale; a good selector should learn
+not to spend there.
 
 \paragraph{Providers differ in how fast they teach Countdown.}
 Figure~\ref{eval:fig:pilot-countdown} follows Countdown accuracy in the single-provider
@@ -148,8 +153,13 @@ the student's Countdown responses ended between 445 and 584 tokens long. The cau
 yet clear. Invalid provider answers alone do not explain it, since 64\% of
 Qwen2.5-Coder-7B's cached Countdown responses contain no valid answer, against a similar
 66\% for Phi-4-mini, which caused no collapse. A provider can therefore harm the student,
-not merely help it less.
-\TBD[investigate the cause of the collapse, and whether it recurs with other seeds]
+not merely help it less. A second explanation was also tested and rejected: a bare guess
+that adds the three numbers would be rewarded if the provider often answered that way, but
+Qwen2.5-Coder-7B's most common answer is that trivial sum on only 2.9\% of prompts, no more
+often than for the other providers (2 to 8\%). The higher learning rate of the follow-up
+check also shortened the student's responses, which suggests that the collapse is a failure
+mode of strong updates rather than a property of one provider. The main runs test whether
+it recurs with other seeds.
 
 \paragraph{The headroom selector made the predicted switch, then stalled on MATH.}
 Figure~\ref{eval:fig:pilot-headroom} shows its run. It began with Qwen2.5-3B on Countdown,
@@ -165,9 +175,8 @@ were random exploration: at Phi-4's price and with a lower ceiling, the degraded
 never has the highest value. The run reached the round cap having spent 1,798 of its 2,400 units.
 The assumption that progress is proportional to headroom
 (Section~\ref{imp:sec:headroom}) fails when a domain has headroom but no learnability, and
-the selector has no feedback from realised gains to correct it.
-\TBD[revise the selector, for example by scaling each arm's headroom by an online
-estimate of the progress it actually produces]
+the selector has no feedback from realised gains to correct it. The main runs use a
+revised selector that learns this feedback (Section~\ref{imp:sec:headroom-learned}).
 
 \begin{figure}[htbp]
 \centering
@@ -188,8 +197,9 @@ zero: a block of Qwen2.5-3B on MATH costing 34 units scored $-0.69$ per thousand
 while blocks of the degraded provider costing about 210 units scored between $-0.07$
 and $+0.14$. With
 gains this small, cost normalisation biases the selector towards expensive arms whatever
-their value.
-\TBD[revise the payoff estimate and the evaluation size before the main runs]
+their value. The main runs use a cost-aware version that estimates gain per round and
+divides by price only when choosing (Section~\ref{imp:sec:selectors}), and every block is
+now evaluated on 256 problems per domain instead of 128.
 
 \paragraph{Uniform allocation spent most of its budget on the expensive providers.}
 Because it gives every arm the same number of blocks, 1,582 of its 2,397 units (66\%) went
@@ -213,6 +223,14 @@ because both selectors showed design flaws that are fixable before the main runs
 pilot does show that the best provider for a domain can differ from the most capable
 one, and that the most cost-effective provider can change as the student learns, which is
 the premise of H1 and H2.
+
+\paragraph{Revisions for the main runs.} The main runs keep the learning rate, replace
+both selectors with the revised versions of Sections~\ref{imp:sec:headroom-learned}
+and~\ref{imp:sec:selectors}, and evaluate each block on 256 problems per domain. In a
+simulator calibrated to the pilot, the revised selectors no longer showed the pilot's
+failures (Section~\ref{imp:sec:verification}). The single-provider runs, uniform
+allocation, provider-free control and SFT baseline are unchanged and are rerun with three
+seeds.
 
 \section{Motivating Experiment: The Cost of Cross-Tokenizer Supervision}
 \label{eval:sec:Motivating}
@@ -341,8 +359,8 @@ Strongest-only             & \TBD & \TBD & \TBD \\
 Cheapest-only              & \TBD & \TBD & \TBD \\
 Best static in hindsight   & \TBD & \TBD & \TBD \\
 \hline
-Headroom per cost (proposed) & \TBD & \TBD & \TBD \\
-Discounted Thompson sampling & \TBD & \TBD & \TBD \\
+Headroom, learned efficiency (proposed) & \TBD & \TBD & \TBD \\
+Cost-aware Thompson sampling & \TBD & \TBD & \TBD \\
 Cost-aware EXP3            & \TBD & \TBD & \TBD \\
 Sliding-window UCB         & \TBD & \TBD & \TBD \\
 Contextual (LinUCB)        & \TBD & \TBD & \TBD \\
