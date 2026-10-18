@@ -16,3 +16,6 @@ main.run.xml
 main.synctex.gz
 main.toc
 
+
+# Figures are PDFs and must be tracked
+!images/*.pdf

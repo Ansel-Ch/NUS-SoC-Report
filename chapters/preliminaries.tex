@@ -471,15 +471,17 @@ This thesis makes the following contributions.
     whether the most valuable provider differs across domains (H1) and changes over
     training (H2) (Chapter~\ref{chap:Evaluation}).
   \item \textbf{Analysis of agreement rewards.} It shows that a student rewarded for
-    agreeing with a provider's answers converges to the provider's most common answer,
-    so that a provider's value as a teacher is bounded by its majority-vote accuracy
-    rather than its single-response accuracy. It measures that such rewards carry about
+    agreeing with a provider's answers is pulled, on each prompt, towards the provider's
+    most common answer, so that a provider's majority-vote accuracy rather than its
+    single-response accuracy measures its quality as a teacher, and that the student can
+    nonetheless pass that level by generalising across prompts. It measures that such rewards carry about
     as much learning signal as ground truth on mathematics and code, and that judging
     providers by their agreement with one another favours the model family that makes
     up most of the pool (Chapter~\ref{chap:Implementation}).
   \item \textbf{A headroom-per-cost selector.} It proposes a selector that scores each
     arm by the gap between the provider's ceiling and the student's current accuracy,
-    divided by the provider's price. Because prices and ceilings are fixed before
+    scaled by a learned estimate of how much progress that gap buys and divided by the
+    provider's price. Because prices and ceilings are fixed before
     training, the selector yields testable predictions of H1 and H2, including the
     student accuracy at which the best provider should change
     (Chapter~\ref{chap:Implementation}).

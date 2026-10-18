@@ -476,6 +476,17 @@ provider's single-response accuracy, is the measure of provider quality used thr
 The two can differ substantially: on Countdown during screening, Phi-4 answered 53\% of
 prompts correctly per response but 66\% by majority vote.
 
+The ceiling is an argument about each prompt separately, and the pilot
+(Section~\ref{eval:sec:Pilot}) showed that it does not limit the student overall. On
+Countdown the student passed the ceilings of two providers, reaching 0.700 on the
+selection set under Qwen2.5-3B, whose ceiling is 0.538, and 0.686 under Phi-4-mini, whose
+ceiling is 0.616. Two features of training explain this. Prompts on which the provider
+gives no valid answer produce no reward, so they do not pull the student towards wrong
+answers. And the student learns a procedure from the prompts on which the provider is
+right, which it can then apply to the prompts on which the provider failed. The ceiling
+therefore describes where an agreement reward points the student on each prompt, not a
+limit on what the student can reach.
+
 The quality of the learning signal can be stated in the same terms. Let $q$ be the
 expected reward of a correct response and $\varepsilon_z$ that of a wrong response with
 answer $z$. If $\varepsilon_z = \varepsilon$ for every wrong answer, then
@@ -606,6 +617,42 @@ result. It ignores transfer between domains, differences in how easily the stude
 absorbs each provider's style, and the student's own capacity. The branching
 measurements of Section~\ref{imp:sec:marginal} provide an independent check of it.
 
+\subsection{Headroom with learned efficiency}
+\label{imp:sec:headroom-learned}
+
+The pilot showed the assumption failing (Section~\ref{eval:sec:Pilot}). MATH kept a large
+headroom while the student made no progress on it, and the selector, which has no feedback
+from realised gains, kept choosing it. The revised selector, used in the main runs, keeps
+the headroom but learns how much progress each unit of headroom actually buys. After a
+block of $n$ rounds on arm $(k, d)$ it records
+\[
+  o = \frac{\alpha^{\mathrm{after}}_{d} - \alpha^{\mathrm{before}}_{d}}
+           {n \cdot \max\big(\mu_{k,d} - \alpha^{\mathrm{before}}_{d},\ h_{\min}\big)},
+\]
+the accuracy gained per round per unit of headroom. Estimates are pooled per domain first,
+because in the pilot learnability was mostly a property of the domain, and each arm's
+estimate is shrunk towards its domain's:
+\[
+  \hat{g}_d = \frac{n_0\, g_0 + \sum o}{n_0 + N_d}, \qquad
+  \hat{g}_{k,d} = \frac{m_0\, \hat{g}_d + \sum o}{m_0 + N_{k,d}},
+\]
+where the first sum runs over all blocks in domain $d$ and the second over blocks on arm
+$(k, d)$, and $N_d$ and $N_{k,d}$ count those blocks. All sums and counts are discounted by
+a factor $\gamma$ per block, because learnability changes as the student learns. The value
+of an arm becomes
+\[
+  \hat{v}(k, d) = \max\big(\hat{g}_{k,d},\, 0\big) \cdot
+                  \frac{\max\big(\mu_{k,d} - \alpha_d,\ h_{\min}\big)}{c_k}.
+\]
+The headroom is floored at $h_{\min} = 0.05$ rather than at zero, because the student can
+pass a provider's ceiling (Section~\ref{imp:sec:ceiling}). Before any evidence arrives,
+every efficiency equals the prior $g_0$ and the selector behaves like the original. A
+domain on which no arm produces progress is learned to be unproductive for every provider
+at once. The prior $g_0 = 0.01$ lies within the range the pilot measured on Countdown in the first
+three blocks of each single-provider run, from $-0.001$ to $+0.018$ accuracy per round per
+unit of headroom. The other settings are $n_0 = m_0 = 2$, $\gamma = 0.95$ and exploration
+0.1.
+
 \subsection{Discounted Thompson sampling}
 
 The model-free comparison treats each arm as a bandit arm whose payoff is the learning
@@ -624,6 +671,19 @@ learns, all past observations are discounted by a factor $\gamma = 0.9$ per bloc
 is the approach of discounted bandits for changing environments
 \autocite{garivier_ducb_2011,raj_dts_2017}. The posterior's noise scale is set to
 the spread of the arms' current mean payoffs.
+
+This is the version run in the pilot, where dividing noisy gains by cost biased it
+towards expensive arms (Section~\ref{eval:sec:Pilot}). The main runs use a cost-aware
+version. It keeps a posterior over each arm's gain per round,
+\[
+  \rho' = \frac{1}{D\, n} \sum_{d'=1}^{D}
+          \big(\alpha^{\mathrm{after}}_{d'} - \alpha^{\mathrm{before}}_{d'}\big),
+\]
+on a common noise scale estimated from repeated observations of the same arm, and brings
+in the price only when choosing: it draws $\theta_a$ from each arm's posterior and plays
+the arm with the largest $\theta_a / c_k$, which is how budgeted Thompson sampling combines
+reward and cost \autocite{xia_budgeted_ts_2015}. Observations are discounted by
+$\gamma = 0.95$ per block.
 
 \subsection{Further adaptive selectors}
 
@@ -774,8 +834,9 @@ budget.
 \label{imp:sec:config}
 
 Table~\ref{imp:tab:config} lists the settings shared by all runs. Values marked with an
-asterisk were set before the pilot run of Chapter~\ref{chap:Evaluation} and may be
-revised in light of it. Chapter~\ref{chap:Evaluation} plans each selector at three
+asterisk were checked or revised after the pilot run of Section~\ref{eval:sec:Pilot}: the
+learning rate was confirmed against a five-times-higher rate, and the selection subsample
+and the selectors were revised. Chapter~\ref{chap:Evaluation} plans each selector at three
 budgets; the pilot uses one, $B = 2{,}400$ \TBD[the two further budgets].
 
 \begin{table}[htbp]
@@ -796,9 +857,10 @@ Optimisation   & optimiser                                & AdamW, no weight dec
                & gradient clipping                        & 1.0 \\
                & LoRA rank, scaling $\alpha$, dropout     & 16, 32, 0 \\
 Selection      & block length $L$                         & 10 rounds \\
-               & selection subsample per domain           & 128 prompts, greedy decoding \\
-               & exploration (headroom selector)          & 0.1 \\
-               & discount $\gamma$ (Thompson sampling)    & 0.9 \\
+               & selection subsample per domain$^{*}$     & 256 prompts (128 in the pilot), greedy \\
+               & exploration (headroom selectors)         & 0.1 \\
+               & learned efficiency $g_0$, $n_0$, $m_0$, $h_{\min}$ & 0.01, 2, 2, 0.05 \\
+               & discount $\gamma$ (revised selectors)$^{*}$ & 0.95 (0.9 in the pilot) \\
 Providers      & cached responses per prompt $m$          & 4 \\
                & sampling for the cache                   & temperature 0.7, top-$p$ 0.95, 2,048 tokens \\
 Replication    & seeds per condition                      & 3 \\
@@ -828,8 +890,9 @@ most two at a time. Each run occupies one GPU, because two runs sharing a GPU we
 measured to be slower in total than the same runs in sequence. Within a run, vLLM
 \autocite{kwon_vllm_2023} generates the student's responses with the current LoRA adapter,
 which is reloaded after every update, and PyTorch with the PEFT library computes the
-update. Scoring runs in parallel worker processes, one per response. In the pilot, a
-round took a median of about 10 seconds on Countdown and 14 seconds on MATH.
+update. Scoring runs in parallel worker processes, one per response. Over the pilot of
+Section~\ref{eval:sec:Pilot}, a round took a median of 11 seconds on Countdown, 14 on code
+and 15 on MATH.
 
 \section{Data Boundaries}
 \label{imp:sec:Boundaries}
@@ -878,6 +941,17 @@ Each component was checked before the main runs.
     one more round fits within the remaining budget, and every charge is logged.
   \item[Cache reproducibility.] Runs read stored responses, so they do not depend on
     regenerating the cache. Regenerating the cache with the same seed was not tested.
+  \item[Revised selectors in simulation.] Before the main runs, both revised selectors were
+    run in a simulator calibrated to the pilot: Countdown progress per round for each
+    provider as measured in the single-provider runs, almost none on MATH and code, and the
+    pilot's evaluation noise, prices, budget and round cap. Over 50 simulated runs each, the
+    original headroom selector reached a mean accuracy of 0.447 and the original Thompson
+    sampling 0.432, with 32\% of its budget on the degraded provider, reproducing the pilot's
+    failures. The learned-efficiency headroom selector reached 0.515, spending 62\% of its
+    budget on Countdown, and cost-aware Thompson sampling reached 0.481 with 4\% on the
+    degraded provider, against 0.496 for the best single provider. Because the simulator is
+    built from the pilot's own measurements, this checks the selectors' logic and is not
+    evidence for H3.
   \item[Training loop.] Short end-to-end runs confirmed budget accounting, the pre-query
     filter, checkpointing, resumption of a branch from a checkpoint, and the provider-free
     baseline. In the selector tests, the headroom selector moved from Qwen2.5-3B on MATH to
