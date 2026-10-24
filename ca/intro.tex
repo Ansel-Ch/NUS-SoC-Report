@@ -1,0 +1,106 @@
+\chapter{Introduction}
+\label{ca:chap:intro}
+
+\section{Motivation}
+\label{ca:sec:motivation}
+
+Much of the knowledge a practitioner would like to train on is no longer available as
+data. Hospitals, banks and firms rarely release their datasets, but they increasingly
+expose models trained on them, through an interface or as open weights. For anyone
+training a small language model, the resource at hand is therefore less often a dataset
+and more often a collection of models to query.
+
+This project started from FedTOPS \autocite{chen_fedtops_2026}, the first study of
+on-policy distillation in a federated setting. It found that a student's progress
+changes what it can next learn from its teacher: averaging client updates slowed a
+prerequisite skill, which delayed the point at which the teacher's supervision became
+useful. FedTOPS has one teacher, reads its token probabilities, and treats every query as
+free. This project asks what happens when those three assumptions are dropped. A student
+can query several black-box models, each answers in text only, and each query has a price.
+If the student's progress changes what it can learn from a teacher, it should also change
+which teacher is worth paying for.
+
+The obvious rule, to always query the strongest model, is known to be a poor one for
+small students. Models of 3B parameters or fewer often learn more from simpler supervision
+than from stronger reasoners \autocite{li_learnability_gap_2025}, and a larger teacher
+does not necessarily yield a better student \autocite{guo_lada_2026}. The project
+therefore studies the following question.
+
+\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=8pt,
+  innerbottommargin=8pt]
+Given a fixed query budget and a set of black-box providers whose usefulness is unknown,
+domain-dependent and changing, how should a student model decide whom to ask, about
+what, and when?
+\end{mdframed}
+
+This setting is called provider-selective distillation. Providers return text only,
+their training data never leaves them, none is assumed best everywhere, each query has a
+price, and the value of a provider depends on the student's current state, which the
+selector's own choices change. The last property separates the problem from online data
+mixing \autocite{albalak_odm_2023}, multi-oracle active learning
+\autocite{donmez_iethresh_2009} and LLM routing \autocite{ong_routellm_2025}: here,
+learning whom to ask and learning from the answer are coupled.
+
+\section{Problem Statement}
+\label{ca:sec:problem}
+
+A student policy $\pi_\theta$ can query $K$ providers $M_1, \dots, M_K$. Provider $M_k$
+is a sampling oracle that returns a text response to a prompt at price $c_k$. Prompts come
+from $D$ domains $\mathcal{X}_1, \dots, \mathcal{X}_D$. The student's utility
+$U(\theta)$ is its mean accuracy over held-out sets, one per domain.
+
+Training proceeds in rounds. In round $t$ a selector chooses an arm $a_t = (k_t, d_t)$,
+a provider and a domain. A batch of $b$ prompts from $\mathcal{X}_{d_t}$ is answered by
+$M_{k_t}$, the student is updated, and the budget is charged $b\,c_{k_t}$. The selector
+sees the student's accuracy on a selection set, disjoint from the test sets. Its goal is
+\[
+  \max_{\pi_{\mathrm{sel}}} \; \mathbb{E}\big[\, U(\theta_\tau) \,\big]
+  \quad \text{subject to} \quad \sum_{t=1}^{\tau} b\, c_{k_t} \le B .
+\]
+The quantity a selector must estimate is the marginal value of an arm per unit cost at the
+current student state,
+\[
+  v(k, d; \theta) =
+  \frac{\mathbb{E}\big[\, U\big(\operatorname{Update}(\theta, S_{k,d})\big) - U(\theta) \,\big]}
+       {b\, c_k},
+\]
+where $S_{k,d}$ is a batch from domain $d$ answered by provider $k$. If $v$ did not
+depend on $\theta$, this would be a bandit problem with costs. Because every update
+changes $\theta$, rewards drift as a result of the selector's own choices.
+
+The problem is only worth solving if provider value really varies in this way. Three
+hypotheses are therefore tested in order.
+
+\begin{description}[itemsep=2pt,topsep=4pt]
+  \item[H1 (Non-dominance).] At a fixed student state, the provider of highest marginal
+    value differs across domains.
+  \item[H2 (State dependence).] Within a domain, the provider of highest marginal value
+    changes during training.
+  \item[H3 (Adaptivity pays).] An adaptive selector reaches higher test utility than the
+    best static allocation at equal budget.
+\end{description}
+
+H1 alone would justify a fixed allocation per domain. H2 is what makes adaptive selection
+necessary, and H3 is what makes it worthwhile. A negative result on H2 is also useful,
+since it would show that an allocation fixed before training is enough.
+
+\section{Objectives and Scope}
+\label{ca:sec:objectives}
+
+The objectives are to:
+\begin{enumerate}[itemsep=1pt,topsep=3pt]
+  \item build a reproducible testbed: a small open student, black-box providers that
+    differ in domain, size and price, one deliberately degraded provider, and tasks with
+    checkable answers;
+  \item measure marginal value directly, by training from shared student checkpoints on
+    each arm, to test H1 and H2;
+  \item design budget-aware selectors and compare them with uniform, single-provider and
+    best-static allocations to test H3;
+  \item explain the results: where learning happens, what the selectors spend on, and
+    why.
+\end{enumerate}
+
+Strategic providers, providers that learn from the student, formal privacy guarantees and
+logit-level distillation are out of scope. Tasks are single-turn with verifiable answers,
+so rewards can be computed cheaply and without a learned judge. Provider responses are
+generated once and cached, and querying is simulated from the cache.

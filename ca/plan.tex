@@ -1,0 +1,94 @@
+\chapter{Plan for the Next Semester}
+\label{ca:chap:plan}
+
+\section{Work completed this semester}
+
+Table~\ref{ca:tab:done} summarises the work so far. Every run is launched from a job queue
+that records its configuration, log and result, and every design decision and its evidence
+is recorded in a decision log, so each number in this report can be traced to a run.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}l>{\raggedright\arraybackslash}p{8.6cm}r@{}}
+\toprule
+\textbf{When} & \textbf{Work} & \textbf{GPU-h} \\
+\midrule
+Sep            & Literature review; problem formulation and hypotheses & -- \\
+to 4 Oct       & Motivating cross-tokenizer experiment (SoC cluster) & -- \\
+10--11 Oct     & Server environment; provider screening (9 models, 3 domains); domains redesigned; design fixed & 3.0 \\
+11 Oct         & Response cache (5 providers, 30,000 responses each) & 8.1 \\
+13--18 Oct     & Pilot (11 runs); revised selectors; learning-rate check; simulator & 16.5 \\
+17--24 Oct     & Main runs (30), checkpoint evaluations (9), branches (216), test evaluation & 80 \\
+\bottomrule
+\end{tabular}
+\caption{Work completed, with L40 GPU-hours on the project server.}
+\label{ca:tab:done}
+\end{table}
+
+\section{Next steps}
+\label{ca:sec:next}
+
+\begin{enumerate}[itemsep=3pt,topsep=3pt]
+  \item \textbf{Settle H1 and H2.} Re-evaluate the 216 branch adapters, saving per-item
+    results, so that providers can be compared on the same items within each seed. Then
+    run longer branches (40 to 60 rounds) and more seeds on Countdown, sized by a power
+    calculation from the current variances, for the providers whose values are close.
+  \item \textbf{Complete H3.} Run the two further budgets, so that the comparison holds at
+    more than one operating point. Add the planned selectors from the literature
+    (cost-aware EXP3, sliding-window UCB and LinUCB), a static allocation that gives each
+    domain its best provider, and an oracle approximation from the branch measurements.
+  \item \textbf{Understand the training instability.} Diagnose the response-length
+    collapse on Countdown, for example by tracking entropy and testing a KL penalty or a
+    length floor, since one collapsed run decides the ranking of a selector.
+  \item \textbf{Widen where learning happens.} Test whether a longer budget or a larger
+    student produces learning on MATH and code, so that H1 can be tested across domains
+    rather than mostly within Countdown.
+  \item \textbf{Selection rewards and allocation.} Compare cheap proxies (loss decrease,
+    learnability, signal density) with utility gain as the selector's feedback, and compare
+    each provider's share of the budget with a post hoc valuation of its contribution.
+  \item \textbf{External check against FedTOPS.} Evaluate the final students on the six
+    mathematics benchmarks used by FedTOPS \autocite{chen_fedtops_2026}, as an
+    out-of-distribution check that places the results next to the work that inspired the
+    project.
+  \item \textbf{Write the dissertation}, keeping the main text well within the 55-page
+    limit and moving implementation detail to appendices.
+\end{enumerate}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Task} & \textbf{Dec} & \textbf{Jan} & \textbf{Feb} & \textbf{Mar} & \textbf{Apr} \\
+\midrule
+1. Settle H1 and H2           & \textbullet & \textbullet &             &             &   \\
+2. Complete H3                &             & \textbullet & \textbullet &             &   \\
+3. Training instability       & \textbullet & \textbullet &             &             &   \\
+4. Learning on MATH and code  &             & \textbullet & \textbullet &             &   \\
+5. Selection rewards, allocation &          &             & \textbullet & \textbullet &   \\
+6. FedTOPS benchmarks         &             &             & \textbullet &             &   \\
+7. Dissertation and presentation & \textbullet &          &             & \textbullet & \textbullet \\
+\bottomrule
+\end{tabular}
+\caption{Schedule for the next semester. December covers the vacation.}
+\label{ca:tab:schedule}
+\end{table}
+
+\section{Resources and risks}
+\label{ca:sec:resources}
+
+\paragraph{Resources.} The project uses a shared server with six NVIDIA L40 GPUs of 48\,GB,
+no job scheduler, and at most two GPUs at a time; the motivating experiment used the School
+of Computing's Slurm cluster. About 110 L40 GPU-hours have been used. The plan above needs
+an estimated 190 more: about 100 for two further budgets, 45 for the new selectors, 35 for
+longer branches and branch re-evaluation, and 10 for the FedTOPS benchmarks. At two GPUs
+this is roughly four days of continuous running, so compute is not the binding constraint.
+Software: Python 3.12, PyTorch, vLLM, TRL and PEFT, with code run in a bubblewrap sandbox.
+
+\paragraph{Risks.} The main risk is that differences between providers stay below what the
+design can detect even with more seeds. That outcome would itself answer the research
+question for this setting: price, not provider identity, decides value. The second risk is
+that learning stays confined to Countdown, which would narrow the claims to one domain. The
+third is GPU contention on the shared server, which the queue handles by waiting for idle
+GPUs.
