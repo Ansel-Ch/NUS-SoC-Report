@@ -1,0 +1,40 @@
+% CA report (CP4101 continuous assessment, 10-15 pages).
+% Build: latexmk -pdf -outdir=build ca.tex
+% The full dissertation draft (main.tex, chapters/) is untouched; this file reuses
+% its preamble, cover, title page and bibliography.
+\documentclass[12pt]{report}
+\input{preamble.tex}
+% A short report: compact chapter headings that do not start a new page.
+\usepackage{titlesec}
+\titleclass{\chapter}{straight}
+\titleformat{\chapter}{\Large\bfseries}{\thechapter}{0.8em}{}
+\titlespacing*{\chapter}{0pt}{14pt}{8pt}
+\renewcommand{\projecttype}{B.Comp. Dissertation\\[2mm]Continuous Assessment Report}
+\renewcommand{\projecttitle}{Automated Agentic AI\\[5mm]
+  {\Large Provider-Selective On-Policy Distillation\\from Black-Box Language Models}}
+
+\begin{document}
+
+\input{cover.tex}
+\input{title.tex}
+\pagenumbering{roman}
+\input{ca/abstract.tex}
+
+\setcounter{tocdepth}{1}
+\tableofcontents
+\clearpage
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\input{ca/intro.tex}
+\input{ca/literature.tex}
+\input{ca/design.tex}
+\input{ca/progress.tex}
+\input{ca/plan.tex}
+
+\clearpage
+\begingroup\sloppy
+\printbibliography[heading=bibintoc, title={References}]
+\endgroup
+
+\end{document}

@@ -1,0 +1,119 @@
+\chapter{Literature Review}
+\label{ca:chap:lit}
+
+This review covers the four lines of work that the project combines and states, for each,
+the assumption that provider-selective distillation drops.
+
+\section{Federated distillation and LLM adaptation}
+
+Federated Averaging trains a shared model by averaging parameters from clients that keep
+their data \autocite{mcmahan_fedavg_2017}. This requires every client to train the same
+architecture and to disclose its weights. Federated distillation exchanges predictions
+instead: FedMD and FedDF distil the averaged outputs of heterogeneous client models on
+public data \autocite{li_fedmd_2019,lin_feddf_2020}, and Selective-FD filters unreliable
+client predictions before they reach the student \autocite{shao_selectivefd_2024}.
+
+The same ideas now reach language models. FedMKT exchanges token-level predictions between
+models with different vocabularies \autocite{fan_fedmkt_2025}, and FedGRPO aggregates only
+the scalar rewards that domain clients return for a server model's answers
+\autocite{zhu_fedgrpo_2026}. LaDA is closest in motivation: it learns which reasoning
+samples each client's small model can absorb, and finds that a larger server model does
+not necessarily give a better client \autocite{guo_lada_2026}.
+
+Two assumptions run through this work. Either every party is consulted on every input, or
+parties are chosen by their competence on the input (FedGRPO), never by how much the
+learner gains. And consulting a party is free apart from communication. Neither holds when
+the parties are priced APIs and the question is which of them is worth paying.
+
+\section{On-policy distillation and the black-box turn}
+
+On-policy distillation trains the student on its own samples, with a teacher scoring the
+tokens it produces. GKD and MiniLLM minimise a divergence between student and teacher on
+student-generated sequences \autocite{agarwal_gkd_2024,gu_minillm_2024}, following the
+imitation-learning result that training on the learner's own states avoids compounding
+errors \autocite{ross_dagger_2011}. These methods need the teacher's next-token
+probabilities over a vocabulary shared with the student.
+
+Cross-tokenizer methods relax the shared vocabulary but keep logit access
+\autocite{boizard_uld_2025,patino_gold_2025}. Any fixed alignment between tokenizers
+discards supervision where the two segmentations disagree \autocite{sun_simct_2026}, and
+the motivating experiment of Section~\ref{ca:sec:motivating} measures that loss directly.
+Black-box methods drop logit access altogether and turn the teacher's text into a reward:
+a learned discriminator in GAD \autocite{ye_gad_2025}, an induced rubric checked by a
+verifier in ROPD \autocite{fang_ropd_2026}, or similarity to teacher continuations in
+OmniOPD \autocite{zhou_omniopd_2026}. All three assume a single teacher queried on every
+prompt.
+
+\section{Multi-teacher distillation}
+
+MOPD routes each prompt to a specialist teacher for its domain and distils on the
+student's own rollouts \autocite{ma_mopd_2026}. TrustMOPD weights teachers per token by a
+reliability proxy \autocite{sun_trustmopd_2026}, and MAD-OPD weights them by their
+confidence after a debate \autocite{wang_madopd_2026}. In all three, teachers are
+white-box, free to query, and routed by domain labels or by a property of the teachers.
+RL-KD did learn per-instance teacher weights with reinforcement learning
+\autocite{yuan_rlkd_2021}, but for off-policy distillation with every teacher available at
+no cost. None of these chooses teachers by what the student gains per unit of cost.
+
+\section{FedTOPS: progress changes what can be learned}
+
+FedTOPS gives clients disjoint prompt sets and a single shared white-box teacher
+(Qwen3-8B), runs on-policy distillation locally, and averages the adapters
+\autocite{chen_fedtops_2026}. It finds that plain averaging can be no better than local
+training, because averaging slows a prerequisite skill and so delays the student's arrival
+at states where the teacher's supervision helps. Its method uses the teacher's agreement
+with the averaged model to scale the server update, and gains 4.6 to 14.6 points of macro
+accuracy over FedAvg on six mathematics benchmarks.
+
+The mechanism is an instance of performative prediction, where a model's own behaviour
+changes the data it is next trained on \autocite{perdomo_performative_2020}. It is also
+the mechanism behind H2. FedTOPS cannot test H2, because it has one teacher, logit access
+and no prices. This project keeps its on-policy setting and its focus on the student's
+state, and changes the other three.
+
+\section{Choosing sources under a budget}
+
+Online Data Mixing treats data domains as arms of an EXP3 bandit and reweights them by
+training loss \autocite{albalak_odm_2023,auer_exp3_2002}, and DUET tunes a mixture across
+whole training runs \autocite{chen_duet_2026}. Both treat sources as fixed datasets whose
+only cost is compute. Bandit theory supplies the remaining pieces: budgets
+\autocite{badanidiyuru_bwk_2013}, drifting rewards \autocite{garivier_ducb_2011} and
+context \autocite{li_linucb_2010}. Rotting bandits model an arm whose reward decays as it
+is pulled \autocite{levine_rotting_2017}. None of them models the case here, where pulling
+any arm changes the student and with it the value of every other arm.
+
+\section{The gap}
+
+Table~\ref{ca:tab:gap} places the closest methods against the properties of the problem.
+No existing method chooses among several black-box providers, at a price, according to
+the student's current state, while training the student on its own rollouts.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Black-box} & \textbf{Private} & \textbf{Several} &
+  \textbf{Priced} & \textbf{State-} & \textbf{On-} \\
+ & \textbf{teacher} & \textbf{data} & \textbf{teachers} & \textbf{queries} &
+  \textbf{dependent} & \textbf{policy} \\
+\midrule
+FedMKT \autocite{fan_fedmkt_2025}       & --         & \checkmark & \checkmark & -- & --         & --         \\
+LaDA \autocite{guo_lada_2026}           & --         & \checkmark & --         & -- & \checkmark & --         \\
+FedGRPO \autocite{zhu_fedgrpo_2026}     & \checkmark & \checkmark & \checkmark & -- & --         & \checkmark \\
+FedTOPS \autocite{chen_fedtops_2026}    & --         & \checkmark & --         & -- & --         & \checkmark \\
+ROPD \autocite{fang_ropd_2026}          & \checkmark & --         & --         & -- & --         & \checkmark \\
+MOPD \autocite{ma_mopd_2026}            & --         & --         & \checkmark & -- & --         & \checkmark \\
+Online Data Mixing \autocite{albalak_odm_2023} & n/a & --         & \checkmark & -- & \checkmark & --         \\
+\midrule
+This project                            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}}
+\caption{Related methods against the properties of provider-selective on-policy
+distillation. State-dependent: what the student receives is revised from its progress
+during training. LaDA and Online Data Mixing adapt over samples or datasets, not over
+teachers.}
+\label{ca:tab:gap}
+\end{table}

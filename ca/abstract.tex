@@ -1,0 +1,38 @@
+\begin{abstract}
+\noindent
+Organisations increasingly expose models rather than data, so a small language model can
+often learn only by querying other models, each with its own price and competence. This
+project studies provider-selective distillation: given a query budget and several
+black-box providers that return text only, how should a student decide whom to ask, about
+what, and when? A 1.5B-parameter student is trained on its own responses, rewarded by
+agreement with the chosen provider's answers, across three domains with checkable answers,
+five providers of different price and quality, and a deliberately degraded copy of the
+strongest. A preliminary experiment showed that logit-based distillation across tokenizers
+is lossy and unstable, which supports the text-only design. Three hypotheses are tested:
+the best provider differs by domain (H1), changes during training (H2), and an adaptive
+selector beats the best fixed allocation (H3). So far, cheap providers give the most
+learning per unit of budget, and the most expensive one leads only where no provider helps. The proposed selector
+matches the best single provider (test utility 0.500 against 0.494) but does not yet beat
+it, and differences among the affordable providers are too small to settle H1 and H2. A plan to
+settle them follows.
+
+\vspace{5mm}
+Subject Descriptors:
+\begin{list}{\quad}{}
+    \item I.2.6 Learning
+    \item I.2.7 Natural Language Processing
+    \item I.2.11 Distributed Artificial Intelligence
+    \item G.3 Probability and Statistics
+\end{list}
+
+Keywords: \\
+\tab On-policy distillation, black-box language models, multi-armed bandits, budget
+allocation, federated learning
+
+Implementation Software and Hardware:
+\begin{list}{\quad}{}
+    \item Python 3.12, PyTorch, vLLM, TRL, PEFT, Math-Verify, bubblewrap
+    \item NVIDIA L40 GPUs (shared server); SoC Slurm cluster (A100, H100)
+\end{list}
+\end{abstract}
+\pagebreak

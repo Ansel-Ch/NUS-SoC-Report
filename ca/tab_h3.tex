@@ -1,0 +1,28 @@
+Ten conditions were run with three seeds each at $B = 2{,}400$, and every final student was
+evaluated greedily on the 1,500 test problems (Table~\ref{ca:tab:h3}).
+
+\input{ca/h3_table.tex}
+
+\paragraph{The proposed selector matches the best single provider but does not beat it.}
+The best single provider is Qwen2.5-7B, with test utility 0.494. The headroom selector with
+learned efficiency reaches 0.500, the highest of any condition and the most consistent
+across seeds (0.503, 0.498 and 0.500), but its paired advantage of $+0.007$ has a 95\%
+interval from $-0.011$ to $+0.026$. H3 is therefore not supported at this budget. The
+selector did learn what the pilot version could not: it spent 38 to 58\% of its budget on
+Countdown, where learning happens, and only 6 to 9\% on Phi-4. It did not reliably avoid the
+degraded provider, which received 16 to 17\% of the budget in two seeds and none in the third.
+
+\paragraph{Other conditions.} Cost-aware Thompson sampling reached 0.465 and 0.502 in two
+seeds but collapsed in the third (0.322), where the student's Countdown answers shrank from
+445 tokens to 38. Uniform allocation spent 59 to 66\% of its budget on Phi-4 and its degraded
+copy and did no better than the cheapest single provider (0.445 against 0.442 for
+Qwen2.5-3B). Phi-4 alone was the worst single provider,
+because its price bought only 110 rounds. The correctness control, which uses ground-truth
+labels and no provider for 200 rounds, reached 0.462, and SFT on provider responses was the
+weakest condition at 0.372, below every on-policy run. As in the pilot, all of the gains are
+on Countdown: no condition moved MATH or code test accuracy by more than 0.024 from the
+untrained student.
+
+These comparisons take the best static allocation over the single-provider runs only. The
+planned per-domain allocation, which gives each domain its best provider, is not yet built
+(Section~\ref{ca:sec:next}).
