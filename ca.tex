@@ -13,6 +13,15 @@
 \renewcommand{\projecttitle}{Automated Agentic AI\\[5mm]
   {\Large Provider-Selective On-Policy Distillation\\from Black-Box Language Models}}
 
+% Numbered findings, in the style of the paper's takeaway boxes.
+\newcounter{takeaway}
+\newenvironment{takeaway}[1]{%
+  \refstepcounter{takeaway}%
+  \begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
+    innerbottommargin=6pt, skipabove=8pt, skipbelow=8pt]%
+  \textbf{Takeaway~\thetakeaway: #1}\par\smallskip\noindent\ignorespaces}%
+  {\end{mdframed}}
+
 \begin{document}
 
 \input{cover.tex}
@@ -28,9 +37,11 @@
 \setcounter{page}{1}
 \input{ca/intro.tex}
 \input{ca/literature.tex}
-\input{ca/design.tex}
-\input{ca/progress.tex}
+\input{ca/preliminaries.tex}
+\input{ca/testbed.tex}
+\input{ca/findings.tex}
 \input{ca/plan.tex}
+\input{ca/conclusion.tex}
 
 \clearpage
 \begingroup\sloppy

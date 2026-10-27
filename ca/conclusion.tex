@@ -1,0 +1,27 @@
+\chapter{Conclusion}
+\label{ca:chap:conclusion}
+
+In this report, we introduced provider-selective distillation, in which a small student
+with a fixed budget chooses which priced, black-box model to learn from, and built a
+testbed to study it. So far we find that text-only rewards are a safer basis than
+cross-tokenizer logits, that price rather than provider strength decides value per unit of
+budget, and that a selector which learns where progress happens matches the best single
+provider without being told which one it is. Whether the best affordable provider differs
+by domain or changes during training, and whether adaptivity can beat the best fixed
+choice, remain open. Next semester we will measure marginal value with enough power to
+settle H1 and H2, complete the H3 comparison at more budgets and against more selectors,
+and explain the training instability.
+
+\chapter*{Limitations}
+\addcontentsline{toc}{chapter}{Limitations}
+\label{ca:chap:limitations}
+
+While the testbed lets us measure provider value directly, it simulates the setting rather
+than reproducing it. Providers are open models that answer from a fixed cache of four
+responses per prompt, prices are a compute-based proxy rather than real API prices, and
+three of the five real providers share the student's model family. The student learns
+almost only on Countdown at this scale, so most of our evidence comes from one domain. Three
+seeds give wide intervals, and the branches saved only aggregate accuracies, so the planned
+bootstrap over selection-set items still needs a re-evaluation of every branch. We also did
+not vary the student's size, run more than one budget, or study multi-turn agentic tasks,
+and the motivating experiment used a different teacher from the main provider pool.

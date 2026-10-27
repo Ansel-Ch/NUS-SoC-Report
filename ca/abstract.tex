@@ -1,20 +1,20 @@
 \begin{abstract}
 \noindent
-Organisations increasingly expose models rather than data, so a small language model can
-often learn only by querying other models, each with its own price and competence. This
-project studies provider-selective distillation: given a query budget and several
-black-box providers that return text only, how should a student decide whom to ask, about
-what, and when? A 1.5B-parameter student is trained on its own responses, rewarded by
-agreement with the chosen provider's answers, across three domains with checkable answers,
-five providers of different price and quality, and a deliberately degraded copy of the
-strongest. A preliminary experiment showed that logit-based distillation across tokenizers
-is lossy and unstable, which supports the text-only design. Three hypotheses are tested:
-the best provider differs by domain (H1), changes during training (H2), and an adaptive
-selector beats the best fixed allocation (H3). So far, cheap providers give the most
-learning per unit of budget, and the most expensive one leads only where no provider helps. The proposed selector
-matches the best single provider (test utility 0.500 against 0.494) but does not yet beat
-it, and differences among the affordable providers are too small to settle H1 and H2. A plan to
-settle them follows.
+Small language models are increasingly trained by querying larger models instead of
+reading datasets. When several such models sit behind priced, text-only interfaces, the
+student must choose which to ask; the common default is the strongest. We study
+this choice, which we term provider-selective distillation: a student with a fixed query
+budget decides, block by block, which black-box provider to ask and about which domain,
+while it learns from its own responses through a reward built on the provider's answers.
+We build a testbed with a 1.5B-parameter student, five providers that differ in price and
+quality, a corrupted copy of the strongest, and three domains with checkable answers. We
+find that cheap providers teach about as fast per gradient step as expensive ones, so the
+strongest and most expensive provider is the worst single teacher at an equal budget. A selector
+that learns how much progress each domain yields matches the best single provider (test
+utility 0.500 against 0.494) without being told which provider that is, but does not yet
+beat it. Whether the best affordable provider differs by domain or changes during
+training is below our current statistical resolution, and we plan the measurements
+needed to settle it.
 
 \vspace{5mm}
 Subject Descriptors:
