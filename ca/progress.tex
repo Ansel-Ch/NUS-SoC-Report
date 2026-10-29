@@ -1,0 +1,91 @@
+\chapter{Progress and Preliminary Results}
+\label{ca:chap:progress}
+
+All three hypotheses have now been run once at full scale, with three seeds. This chapter
+reports what has been found so far and how confident each finding is. All experiments run
+on a shared server with six NVIDIA L40 GPUs (Section~\ref{ca:sec:resources}).
+
+\section{Motivating experiment: the cost of cross-tokenizer supervision}
+\label{ca:sec:motivating}
+
+The black-box assumption gives up the teacher's token probabilities. To see what that
+costs, on-policy distillation from Qwen3-4B-Instruct was run on Countdown with three
+students, each first fine-tuned to the same starting accuracy of about 0.38
+(Table~\ref{ca:tab:motivating}). Recovery $R$ is the fraction of the gap between that
+starting point and the teacher (0.713) that distillation closed.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}llllc@{}}
+\toprule
+\textbf{Student} & \textbf{Tokenizer} & \textbf{Loss} & \textbf{Accuracy} & $R$ \\
+\midrule
+Qwen2.5-1.5B & shared       & exact logits (GKD)                & 0.379 $\to$ 0.600 & 0.66 \\
+Qwen2.5-1.5B & shared       & cross-tokenizer loss (ULD)        & 0.379 $\to$ 0.487 & 0.32 \\
+OLMo-2-1B    & different    & cross-tokenizer loss (ULD)        & 0.381 $\to$ 0.426 & 0.14 \\
+OLMo-2-1B    & different    & GOLD hybrid                       & 0.381 $\to$ 0.035 & collapsed \\
+SmolLM2-1.7B & different    & GOLD hybrid                       & 0.375 $\to$ 0.000 & collapsed \\
+\bottomrule
+\end{tabular}
+\caption{On-policy distillation on Countdown with and without a shared tokenizer
+(200 steps, 1,000 test puzzles). The first OLMo-2 GOLD run was stopped at step 110.}
+\label{ca:tab:motivating}
+\end{table}
+
+The cross-tokenizer loss alone halved recovery on a shared tokenizer (0.66 to 0.32; paired
+difference $+0.113$, 95\% interval $[+0.091, +0.136]$), and a real tokenizer mismatch
+halved it again (0.14). The GOLD hybrid loss, the current method for cross-tokenizer
+on-policy distillation, collapsed on both cross-tokenizer students. Its loss kept falling
+while accuracy went to zero: it forced OLMo-2 into the teacher's single-digit number
+segmentation, which broke its arithmetic, and it let SmolLM2 emit newlines to the length
+limit. Logit-level supervision across model families is therefore both lossy and fragile,
+which supports building the project on a text-only reward.
+
+\section{Pilot run and what it changed}
+\label{ca:sec:pilot}
+
+Every condition was first run once (seed 0, 14.4 GPU-hours) to test the pipeline. Three
+findings changed the design. First, the student learned almost only on Countdown, from
+0.218 to as much as 0.714 test accuracy; no condition moved MATH or code by more than
+0.042, about 1.3 standard errors. A five-times-higher learning rate did not help MATH or
+code and cut the Countdown gain from $+0.280$ to $+0.098$, so the rate was kept. Second,
+the original headroom selector made the predicted switch from Qwen2.5-3B to Qwen2.5-7B on
+Countdown, but then spent 320 of its 400 rounds on MATH, where the headroom never shrank
+because nothing was learned. It had no feedback from realised gains, which the revised
+selector adds. Third, the original Thompson sampling spent 55\% of its budget on the
+degraded provider: dividing noisy gains by cost shrinks the noise of expensive arms towards
+zero and so favours them. The revised version estimates gain per round and applies the
+price only when choosing. In a simulator calibrated to the pilot, both revised selectors no
+longer showed these failures.
+
+\section{Main runs: does adaptivity pay? (H3)}
+\label{ca:sec:h3}
+
+\input{ca/tab_h3.tex}
+
+\section{Marginal value across domains and over training (H1, H2)}
+\label{ca:sec:h12}
+
+\input{ca/sec_h12.tex}
+
+\section{Issues and limitations found so far}
+\label{ca:sec:issues}
+
+\begin{description}[itemsep=2pt,topsep=3pt]
+  \item[Learning is concentrated in one domain.] At this scale the student learns almost
+    nothing on MATH and code from any provider, or from ground truth. Most of the
+    selection problem therefore reduces to how fast each provider teaches Countdown per
+    unit of budget. A selector can still win by learning not to spend on MATH and code,
+    but H1 and H2 can only be observed where learning happens.
+  \item[Statistical power.] Twenty-round branches move selection accuracy by a few points
+    at most, and three seeds give wide intervals. The branches also saved only aggregate
+    accuracies, so the planned bootstrap over selection-set items cannot yet be computed.
+  \item[Training instability.] In the pilot, the student's Countdown responses collapsed
+    to a bare answer under Qwen2.5-Coder-7B. This recurred with other providers and in one Thompson
+    sampling run, so it is a property of the update, not of one provider, and it is not yet
+    understood.
+  \item[Simulated providers.] Prices are a compute-based proxy, and providers are open
+    models answering from a fixed cache of four responses per prompt. Three of the five
+    real providers share the student's model family.
+\end{description}
