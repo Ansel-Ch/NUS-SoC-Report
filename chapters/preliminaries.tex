@@ -132,13 +132,13 @@ With the per-token importance ratio
        {\pi_{\theta_{\mathrm{old}}}(y_{i,j} \mid x, y_{i,<j})},
 \]
 GRPO maximises the clipped objective
-\begin{multline*}
+\begin{align*}
   J(\theta) = \mathbb{E}\Bigg[ \frac{1}{n} \sum_{i=1}^{n} \frac{1}{|y_i|}
-  \sum_{j=1}^{|y_i|} \min\!\Big( \rho_{i,j}(\theta) A_i,\ \\
+  \sum_{j=1}^{|y_i|} \min\!\Big( \rho_{i,j}(\theta) A_i,\ 
   \operatorname{clip}\big(\rho_{i,j}(\theta), 1 - \epsilon_{\mathrm{clip}},
   1 + \epsilon_{\mathrm{clip}}\big) A_i \Big) \Bigg]
   - \beta \, D_{\mathrm{KL}}\big(\pi_\theta \,\|\, \pi_{\mathrm{ref}}\big),
-\end{multline*}
+\end{align*}
 where $\epsilon_{\mathrm{clip}}$ bounds the size of each policy update,
 $\pi_{\mathrm{ref}}$ is a fixed reference policy, and $\beta$ controls the strength of
 the KL penalty. If every rollout in a group receives the same reward, all advantages
