@@ -4,7 +4,7 @@
 All three hypotheses have now been run once at full scale, with three seeds. This chapter
 reports what we have found and how confident each finding is.
 
-\section{Text-Only Supervision Avoids the Tokenizer Cost}
+\section{Logits Help Only with a Shared Tokenizer}
 \label{ca:sec:motivating}
 
 The black-box assumption gives up the teacher's token probabilities. To see what those are
@@ -39,10 +39,11 @@ hybrid loss collapsed on both cross-tokenizer students while its value kept fall
 forced OLMo-2 into the teacher's single-digit number tokens, which broke its arithmetic, and
 it let SmolLM2 emit newlines to the length limit.
 
-\begin{takeaway}{Text-Only Supervision Is the Safer Choice}
+\begin{takeaway}{Logits Need a Shared Tokenizer}
 \label{ca:tk:blackbox}
-Logit-level supervision across model families is both lossy and fragile, so a reward
-computed from the teacher's text is a sound basis for learning from heterogeneous providers.
+With a shared tokenizer, exact logits closed two thirds of the gap to the teacher in 200
+steps. Across model families, logit-level supervision is lossy and fragile, so a reward
+computed from the teacher's text was the safe choice for a pool of mixed families.
 \end{takeaway}
 
 \section{Selectors Need Feedback from Realised Gains}
@@ -163,3 +164,31 @@ At this scale the student learns almost only on Countdown, on-policy learning cl
 imitation, and the collapse of response length is a property of the update rather than of
 any one provider.
 \end{takeaway}
+
+\section{From These Findings to the Refined Problem}
+\label{ca:sec:refined}
+
+The findings, and feedback on the project, change the problem in four ways.
+
+\paragraph{The budget made the problem about price.} Under a budget, what
+providers cost decided the comparison between them, not what they teach
+(Takeaway~\ref{ca:tk:price}). We remove the budget and compare curricula by their learning
+curves: test accuracy against the number of prompts the student has trained on.
+
+\paragraph{An answer-only reward makes the provider a noisy label.} The agreement reward
+uses only a provider's final answers. A control trained on ground truth with no provider
+reached 0.462 in 200 rounds, close to the single-provider runs, so on tasks with checkable
+answers the provider added little that the labels did not. A teacher must contribute
+something a label cannot, and its token probabilities are the natural candidate.
+
+\paragraph{The update needs a denser signal.} One scalar per response left MATH and code
+unmoved and let Countdown collapse (Takeaway~\ref{ca:tk:countdown}). With a shared
+tokenizer, token probabilities give supervision at every position and worked well in our
+motivating experiment (Takeaway~\ref{ca:tk:blackbox}). We therefore restrict the pool to
+providers of the student's family, Qwen2.5-3B, Qwen2.5-7B and Qwen2.5-Coder-7B, and make
+them white-box.
+
+\paragraph{The problem is a curriculum, not a federation.} No party here holds private
+data and nothing is aggregated. What the selector does, choosing the next arm from the
+student's progress, is automated curriculum learning with the teacher as a second axis,
+and we now position the work there (Chapter~\ref{ca:chap:lit}).

@@ -96,3 +96,13 @@
 \newcommand{\projecttitle}{Automated Agentic AI}
 \newcommand{\academicyear}{2026/2027}
 
+
+% Numbered findings, in the style of the paper's takeaway boxes.
+\newcounter{takeaway}
+\newenvironment{takeaway}[1]{%
+  \refstepcounter{takeaway}%
+  \begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
+    innerbottommargin=6pt, skipabove=8pt, skipbelow=8pt]%
+  \textbf{Takeaway~\thetakeaway: #1}\par\smallskip\noindent\ignorespaces}%
+  {\end{mdframed}}
+

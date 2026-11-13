@@ -1,22 +1,23 @@
 \chapter{Literature Review}
 \label{ca:chap:lit}
 
-\section{Federated distillation and LLM adaptation}
+\section{Curriculum learning}
 
-Federated Averaging trains a shared model by averaging the parameters of clients that keep
-their data \autocite{mcmahan_fedavg_2017}, which requires every client to share one
-architecture and disclose its weights. Federated distillation exchanges predictions
-instead, distilling the averaged outputs of heterogeneous clients on public data
-\autocite{li_fedmd_2019,lin_feddf_2020} and filtering unreliable ones
-\autocite{shao_selectivefd_2024}. The same ideas now reach language models: FedMKT
-exchanges token-level predictions across vocabularies \autocite{fan_fedmkt_2025}, FedGRPO
-returns only scalar rewards from domain clients \autocite{zhu_fedgrpo_2026}, and LaDA
-learns which reasoning samples each small client can absorb \autocite{guo_lada_2026}.
-These methods either consult every party on every input or choose parties by their
-competence on the input, and consultation is free. In contrast, our work chooses parties by
-what the learner gains per unit of price.
+Curriculum learning orders training examples from easy to hard by a fixed measure of
+difficulty \autocite{bengio_curriculum_2009}, and self-paced learning lets the model's own
+loss set the order \autocite{kumar_selfpaced_2010}. Automated curricula remove the fixed
+measure: a bandit chooses the next task and is rewarded by the learner's progress on it
+\autocite{graves_curriculum_2017,matiisen_tscl_2017}, and Prioritized Level Replay revisits
+the tasks on which a reinforcement learning agent can still improve
+\autocite{jiang_plr_2021}. For language models, Online Data Mixing reweights data domains
+with an EXP3 bandit on training loss \autocite{albalak_odm_2023,auer_exp3_2002}, and the
+Self-Evolving Curriculum chooses problem categories during reinforcement learning
+fine-tuning by the size of the advantages they produce \autocite{chen_sec_2025}. All of
+these choose what to practise, from fixed tasks or datasets. In contrast, our curriculum
+also chooses whom to learn from, and the sources are models whose usefulness depends on the
+student.
 
-\section{On-policy distillation and the black-box turn}
+\section{On-policy distillation}
 
 GKD and MiniLLM train the student on its own samples under a divergence to the teacher
 \autocite{agarwal_gkd_2024,gu_minillm_2024}, which avoids the compounding errors of
@@ -26,71 +27,58 @@ vocabulary \autocite{boizard_uld_2025,patino_gold_2025}, but any fixed alignment
 supervision where segmentations disagree \autocite{sun_simct_2026}. Black-box methods turn
 the teacher's text into a reward instead: a discriminator in GAD \autocite{ye_gad_2025},
 a rubric checked by a verifier in ROPD \autocite{fang_ropd_2026}, or similarity to teacher
-continuations in OmniOPD \autocite{zhou_omniopd_2026}. All of them assume one teacher queried
-on every prompt. Our work keeps the black-box reward but asks which of several teachers to
-query.
+continuations in OmniOPD \autocite{zhou_omniopd_2026}. FedTOPS shows, with one teacher and
+several clients, that the student's progress changes what it can next learn from that
+teacher \autocite{chen_fedtops_2026}. All of these assume one teacher consulted on every
+prompt. Our work asks which of several teachers to consult.
 
 \section{Multi-teacher distillation}
 
-MOPD routes each prompt to a specialist teacher for its domain
-\autocite{ma_mopd_2026}, TrustMOPD weights teachers per token by a reliability proxy
+A teacher that is too strong can teach worse than a weaker one, which motivated inserting a
+mid-sized teacher assistant between the two \autocite{mirzadeh_ta_2020} and was observed
+again for small language models \autocite{li_learnability_gap_2025}. With several teachers,
+MOPD routes each prompt to a specialist teacher for its domain \autocite{ma_mopd_2026},
+TrustMOPD weights teachers per token by a reliability proxy
 \autocite{sun_trustmopd_2026}, and MAD-OPD weights them by their confidence after a debate
 \autocite{wang_madopd_2026}. RL-KD learned per-instance teacher weights with reinforcement
-learning, but for off-policy distillation \autocite{yuan_rlkd_2021}. In all of these the
-teachers are free to query, and the routing rule is fixed by domain labels or by a property
-of the teachers. In contrast, our selectors learn the rule from the student's realised
-progress, under a budget.
+learning, but for off-policy distillation \autocite{yuan_rlkd_2021}. Federated distillation
+likewise combines the predictions of several parties
+\autocite{li_fedmd_2019,lin_feddf_2020,fan_fedmkt_2025}. In these methods the routing or
+weighting rule is fixed by domain labels or by a property of the teachers. In contrast, our
+selectors learn the rule from the student's realised progress.
 
-\section{FedTOPS: progress changes what can be learned}
+\section{Bandits whose arms change the learner}
 
-FedTOPS gives clients disjoint MATH prompts and one shared teacher (Qwen3-8B), runs
-on-policy distillation locally and averages the adapters \autocite{chen_fedtops_2026}. It
-finds that plain averaging can be no better than local training, because averaging slows a
-prerequisite skill and so delays the point at which the teacher's supervision helps; its
-method gains 4.6 to 14.6 points of macro accuracy over FedAvg on six mathematics
-benchmarks. The mechanism is an instance of performative prediction, in which a model's own
-behaviour changes the data it is next trained on \autocite{perdomo_performative_2020}, and
-it is the mechanism behind our H2. FedTOPS cannot test H2, because it has one teacher. Our
-work keeps its on-policy setting and its focus on the student's state, and adds several
-priced, text-only teachers.
-
-\section{Choosing sources under a budget}
-
-Online Data Mixing treats data domains as arms of an EXP3 bandit reweighted by training
-loss \autocite{albalak_odm_2023,auer_exp3_2002}, and DUET tunes a mixture across whole runs
-\autocite{chen_duet_2026}; both treat sources as fixed datasets. Bandit theory supplies
-budgets \autocite{badanidiyuru_bwk_2013}, drifting rewards \autocite{garivier_ducb_2011} and
-context \autocite{li_linucb_2010}, and rotting bandits let an arm's reward decay as it is
-pulled \autocite{levine_rotting_2017}. None of them models our case, where pulling any arm
-changes the student and therefore the value of every other arm.
-Table~\ref{ca:tab:gap} summarises the gap.
+Bandit theory handles budgets \autocite{badanidiyuru_bwk_2013}, rewards that drift
+\autocite{garivier_ducb_2011} and context \autocite{li_linucb_2010}, and rotting bandits let
+an arm's reward decay as it is pulled \autocite{levine_rotting_2017}. None of them models
+our case, where pulling any arm changes the student and therefore the value of every other
+arm. Table~\ref{ca:tab:gap} summarises the gap.
 
 \begin{table}[htbp]
 \centering
-\small
+\footnotesize
 \setlength{\tabcolsep}{3pt}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}lcccccc@{}}
+\begin{tabular}{@{}lccccc@{}}
 \toprule
-\textbf{Method} & \textbf{Black-box} & \textbf{Private} & \textbf{Several} &
-  \textbf{Priced} & \textbf{State-} & \textbf{On-} \\
- & \textbf{teacher} & \textbf{data} & \textbf{teachers} & \textbf{queries} &
-  \textbf{dependent} & \textbf{policy} \\
+\textbf{Method} & \textbf{Several} & \textbf{On-policy} & \textbf{Chooses} &
+  \textbf{Chooses} & \textbf{Learned from} \\
+ & \textbf{teachers} & \textbf{distillation} & \textbf{teacher} & \textbf{domain} &
+  \textbf{progress} \\
 \midrule
-FedMKT \autocite{fan_fedmkt_2025}       & --         & \checkmark & \checkmark & -- & --         & --         \\
-LaDA \autocite{guo_lada_2026}           & --         & \checkmark & --         & -- & \checkmark & --         \\
-FedGRPO \autocite{zhu_fedgrpo_2026}     & \checkmark & \checkmark & \checkmark & -- & --         & \checkmark \\
-FedTOPS \autocite{chen_fedtops_2026}    & --         & \checkmark & --         & -- & --         & \checkmark \\
-ROPD \autocite{fang_ropd_2026}          & \checkmark & --         & --         & -- & --         & \checkmark \\
-MOPD \autocite{ma_mopd_2026}            & --         & --         & \checkmark & -- & --         & \checkmark \\
-Online Data Mixing \autocite{albalak_odm_2023} & n/a & --         & \checkmark & -- & \checkmark & --         \\
+TSCL \autocite{matiisen_tscl_2017} & -- & -- & -- & \checkmark & \checkmark \\
+Self-Evolving Curriculum \autocite{chen_sec_2025}        & -- & -- & -- & \checkmark & \checkmark \\
+Online Data Mixing \autocite{albalak_odm_2023}           & -- & -- & -- & \checkmark & \checkmark \\
+GKD \autocite{agarwal_gkd_2024}                          & -- & \checkmark & -- & -- & -- \\
+MOPD \autocite{ma_mopd_2026}                             & \checkmark & \checkmark & \checkmark & -- & -- \\
+TrustMOPD \autocite{sun_trustmopd_2026}                  & \checkmark & \checkmark & \checkmark & -- & -- \\
 \midrule
-This project                            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+This project                                             & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
 \bottomrule
-\end{tabular}}
-\caption{No existing method chooses among several priced black-box teachers by the
-student's current state while training on-policy. State-dependent: what the student
-receives is revised from its progress; LaDA and Online Data Mixing adapt over samples or
-datasets, not over teachers.}
+\end{tabular}
+\caption{Curriculum methods choose what to practise and multi-teacher methods choose whom
+to learn from, but no existing method chooses both from the student's own progress.
+TSCL is the teacher-student curriculum. Learned from progress: the choice is revised during training from a signal of how much the
+student is learning; MOPD and TrustMOPD choose the teacher by a fixed rule.}
 \label{ca:tab:gap}
 \end{table}

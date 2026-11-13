@@ -4,28 +4,29 @@
 \section{Notation and Problem Statement}
 \label{ca:sec:problem}
 
-A student policy $\pi_\theta$ can query $K$ providers $M_1, \dots, M_K$. Provider $M_k$
-is a sampling oracle that returns a text response to a prompt at price $c_k$. Prompts come
-from $D$ domains $\mathcal{X}_1, \dots, \mathcal{X}_D$, and the student's utility
+A student policy $\pi_\theta$ can learn from $K$ providers $M_1, \dots, M_K$. Prompts
+come from $D$ domains $\mathcal{X}_1, \dots, \mathcal{X}_D$, and the student's utility
 $U(\theta)$ is its mean accuracy over held-out sets, one per domain. Training proceeds in
 rounds. In round $t$ a selector chooses an arm $a_t = (k_t, d_t)$, a provider and a
-domain; a batch of $b$ prompts from $\mathcal{X}_{d_t}$ is answered by $M_{k_t}$, the
-student is updated, and the budget is charged $b\,c_{k_t}$. The selector sees only the
-student's accuracy on a selection set that is disjoint from the test sets. Its goal is
+domain, and the student is updated on a batch $S_{k_t,d_t}$ of $b$ prompts from
+$\mathcal{X}_{d_t}$ under the supervision of $M_{k_t}$. The sequence of arms is the
+curriculum. The selector sees only the student's accuracy on a selection set that is
+disjoint from the test sets, and it should make $U(\theta_t)$ rise as fast and as far as
+possible. The quantity it must estimate is the marginal value of an arm at the current
+state,
 \[
-  \max_{\pi_{\mathrm{sel}}} \; \mathbb{E}\big[\, U(\theta_\tau) \,\big]
-  \quad \text{subject to} \quad \sum_{t=1}^{\tau} b\, c_{k_t} \le B .
+  g(k, d; \theta) =
+  \mathbb{E}\big[\, U\big(\operatorname{Update}(\theta, S_{k,d})\big) - U(\theta) \,\big].
 \]
-The quantity a selector must estimate is the marginal value of an arm per unit of cost at
-the current state,
-\[
-  v(k, d; \theta) =
-  \frac{\mathbb{E}\big[\, U\big(\operatorname{Update}(\theta, S_{k,d})\big) - U(\theta) \,\big]}
-       {b\, c_k},
-\]
-where $S_{k,d}$ is a batch from domain $d$ answered by provider $k$. If $v$ did not depend
-on $\theta$, the problem would be a bandit with costs. Because every update changes
-$\theta$, the values drift as a result of the selector's own choices.
+If $g$ did not depend on $\theta$, the problem would be an ordinary bandit. Because every
+update changes $\theta$, the values drift as a result of the selector's own choices.
+
+\paragraph{The budgeted, black-box version.} All experiments in this report use the first
+version of the problem. Provider $M_k$ is a sampling oracle that returns a text response to
+a prompt at price $c_k$, a round on arm $(k, d)$ is charged $b\,c_k$, and training stops
+when a budget $B$ is spent. The selector then maximises $\mathbb{E}[U(\theta_\tau)]$
+subject to $\sum_{t \le \tau} b\,c_{k_t} \le B$, and the relevant quantity is the marginal
+value per unit of cost, $v(k, d; \theta) = g(k, d; \theta) / (b\,c_k)$.
 
 \paragraph{Hypotheses.} The problem is worth solving only if provider value varies in this
 way, so we test three hypotheses in order. H1 (non-dominance): at a fixed student state,

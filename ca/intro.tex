@@ -3,31 +3,36 @@
 
 Much of the knowledge a practitioner would like to train on is no longer available as
 data. Hospitals, banks and firms rarely release their datasets, but they increasingly
-expose models trained on them, through an interface or as open weights. For anyone training a small language model, the resource at
-hand is therefore less often a dataset and more often a set of models to query, each with
-its own price and competence. On-policy distillation, in which the student learns from its
-own responses as scored by a teacher \autocite{agarwal_gkd_2024,gu_minillm_2024}, is a
-natural way to learn from such models.
+expose models trained on them, through an interface or as open weights. For anyone training
+a small language model, the resource at hand is therefore less often a dataset and more
+often a set of models to learn from, each with its own competence. On-policy distillation,
+in which the student learns from its own responses as scored by a teacher
+\autocite{agarwal_gkd_2024,gu_minillm_2024}, is a natural way to learn from such models.
 
-This project started from FedTOPS \autocite{chen_fedtops_2026}, the first study of
-on-policy distillation in a federated setting. It found that a student's progress changes
-what it can next learn from its teacher. FedTOPS has one teacher, reads its token
-probabilities, and treats every query as free. We drop all three assumptions. If a
-student's progress changes what it can learn from a teacher, it should also change which
-of several priced, text-only teachers is worth paying for.
-
-The usual default is to query the strongest model. However, small models (3B parameters or
-fewer) often learn more from smaller teachers than from strong reasoners
-\autocite{li_learnability_gap_2025}, and a larger teacher does not necessarily give a
-better student \autocite{guo_lada_2026}. We therefore study the following problem, which
-we term provider-selective distillation.
+Deciding what a learner should practise next is the subject of curriculum learning
+\autocite{bengio_curriculum_2009}. Automated curricula treat the decision as a bandit
+problem in which a task is rewarded by the progress the learner makes on it
+\autocite{graves_curriculum_2017,matiisen_tscl_2017}, and the idea has recently been
+applied to the fine-tuning of language models, with problem categories as the tasks
+\autocite{chen_sec_2025}. Distillation from several models adds a second decision to the
+curriculum: not only what to practise, but whom to learn it from. The usual default is the
+strongest model. However, small models (3B parameters or fewer) often learn more from
+smaller teachers than from strong reasoners \autocite{li_learnability_gap_2025}, and a
+larger teacher does not necessarily give a better student \autocite{guo_lada_2026}. We
+therefore study a curriculum over pairs of provider and domain, which we term
+provider-selective distillation.
 
 \begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=8pt,
   innerbottommargin=8pt]
-Given a fixed query budget and several black-box providers whose usefulness is unknown,
-domain-dependent and changing, how should a student decide whom to ask, about what, and
-when?
+Given several white-box providers and different domains, how should a student decide whom
+to ask, about what, and when?
 \end{mdframed}
+
+This report covers the first version of the problem that we studied. In it the providers
+are black-box, returning only text, and every query has a price, so the curriculum must
+fit a fixed budget. The findings of that study, together with feedback on the project, led
+to the statement above, which removes the budget and lets the student read the providers'
+token probabilities. Section~\ref{ca:sec:refined} explains the change.
 
 \begin{figure}[htbp]
 \centering
@@ -39,25 +44,27 @@ averaged over three seeds; bars are 95\% bootstrap intervals.}
 \label{ca:fig:teaser}
 \end{figure}
 
-It differs from online data mixing \autocite{albalak_odm_2023} and LLM routing
-\autocite{ong_routellm_2025} in one essential way: every query changes the student, and
-with it the value of every provider at the next decision. To study it, we (1) build a
+The problem differs from online data mixing \autocite{albalak_odm_2023} and LLM routing
+\autocite{ong_routellm_2025} in one essential way: every choice changes the student, and
+with it the value of every provider at the next decision. So far, we have (1) built a
 reproducible testbed with priced black-box providers, including a corrupted one; (2)
-measure the value of each provider directly, by training from shared student checkpoints
-on one provider at a time; and (3) design budget-aware selectors and compare them with
-fixed allocations. Figure~\ref{ca:fig:teaser} summarises the main result so far. Cheap
-providers teach about as fast per gradient step as expensive ones, so price decides value
-(Takeaway~\ref{ca:tk:price}). Our selector reaches the highest test utility of any
-condition, 0.500 against 0.494 for the best single provider, but the difference is within
-noise (Takeaway~\ref{ca:tk:h3}).
+measured the value of each provider directly, by training from shared student checkpoints
+on one provider at a time; and (3) designed selectors that learn from the student's
+progress and compared them with fixed allocations. Figure~\ref{ca:fig:teaser} summarises
+the main result. Cheap providers teach about as fast per gradient step as expensive ones,
+so under a budget price decides value (Takeaway~\ref{ca:tk:price}). Our selector reaches
+the highest test utility of any condition, 0.500 against 0.494 for the best single
+provider, but the difference is within noise (Takeaway~\ref{ca:tk:h3}).
 
 \section{Objectives and Scope}
 \label{ca:sec:objectives}
 
-The project has four objectives: to build the testbed; to test whether the best provider
+This semester had four objectives: to build the testbed; to test whether the best provider
 differs by domain (H1) and changes during training (H2); to design selectors and test
 whether adaptivity beats the best fixed allocation (H3); and to explain where learning
-happens and what the selectors spend on. Strategic providers, providers that learn from
-the student, formal privacy guarantees and logit-level distillation are out of scope.
-Tasks are single-turn with checkable answers, so that rewards are cheap and need no learned
-judge.
+happens and what the selectors choose. Next semester's objective is a training framework
+for the refined problem: a student that learns from several providers of its own model
+family, with their token probabilities, efficiently enough to make progress on every
+domain and to pass its teachers. Strategic providers, providers that learn from the
+student and formal privacy guarantees are out of scope. Tasks are single-turn with
+checkable answers, so that rewards are cheap and need no learned judge.

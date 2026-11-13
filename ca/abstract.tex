@@ -1,33 +1,32 @@
 \begin{abstract}
 \noindent
-Small language models are increasingly trained by querying larger models instead of
-reading datasets. When several such models sit behind priced, text-only interfaces, the
-student must choose which to ask; the common default is the strongest. We study
-this choice, which we term provider-selective distillation: a student with a fixed query
-budget decides, block by block, which black-box provider to ask and about which domain,
-while it learns from its own responses through a reward built on the provider's answers.
-We build a testbed with a 1.5B-parameter student, five providers that differ in price and
-quality, a corrupted copy of the strongest, and three domains with checkable answers. We
-find that cheap providers teach about as fast per gradient step as expensive ones, so the
-strongest and most expensive provider is the worst single teacher at an equal budget. A selector
-that learns how much progress each domain yields matches the best single provider (test
-utility 0.500 against 0.494) without being told which provider that is, but does not yet
-beat it. Whether the best affordable provider differs by domain or changes during
-training is below our current statistical resolution, and we plan the measurements
-needed to settle it.
+Small language models are increasingly trained by distilling from larger models, and
+several such models are often available. The student must then decide which one to learn
+from, on which domain, and when; the common default is the strongest throughout. We treat
+this as a curriculum learning problem over pairs of provider and domain, which we term
+provider-selective distillation: the next pair is chosen from the progress the student
+actually makes. This semester we studied a first version of the problem, with text-only
+providers and a price on every query, on a testbed with a 1.5B-parameter student, five
+providers and three domains with checkable answers. We
+find that providers of very different strength teach at a similar rate per gradient step,
+so price decided value and the strongest provider was the worst single
+choice. A selector that learns where progress happens matches the best single provider
+(test utility 0.500 against 0.494) without being told which one it is. Learning was
+confined to one domain and was unstable. These findings lead us to refine the problem: we
+remove the budget, give the student the providers' token probabilities, and aim for a
+framework in which a student can pass its teachers.
 
 \vspace{5mm}
 Subject Descriptors:
 \begin{list}{\quad}{}
     \item I.2.6 Learning
     \item I.2.7 Natural Language Processing
-    \item I.2.11 Distributed Artificial Intelligence
     \item G.3 Probability and Statistics
 \end{list}
 
 Keywords: \\
-\tab On-policy distillation, black-box language models, multi-armed bandits, budget
-allocation, federated learning
+\tab On-policy distillation, curriculum learning, multi-teacher distillation,
+multi-armed bandits
 
 Implementation Software and Hardware:
 \begin{list}{\quad}{}
