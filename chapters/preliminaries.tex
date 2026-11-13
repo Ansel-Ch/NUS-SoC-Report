@@ -6,49 +6,32 @@
 
 This section fixes the notation and terminology used throughout the report. It
 extends the notation of Section~\ref{sec:Problem Statement}: $\pi_\theta$ is the
-student, $\mathcal{M} = \{M_1, \dots, M_K\}$ the providers, $c_k$ the price of a
-query to $M_k$, $\mathcal{X}_1, \dots, \mathcal{X}_D$ the prompt domains and $B$ the
-query budget.
+student, $\mathcal{M} = \{M_1, \dots, M_K\}$ the providers and
+$\mathcal{X}_1, \dots, \mathcal{X}_D$ the prompt domains.
 
-\subsection{Providers, Clients and Access}
+\subsection{Providers and Access}
 
 \begin{Definitions}[Provider]
-A provider $M_k$ is a party that holds a language model, and possibly private data on
-which that model was trained, and that answers queries from the student. Each
-provider is characterised by its access mode, its per-query price $c_k$ and its
-unknown competence on each domain.
+A provider $M_k$ is a party that holds a language model and lets the student learn
+from it. Each provider is characterised by its access mode and its unknown competence
+on each domain. A provider is also called a teacher.
 \end{Definitions}
-
-The term provider is used in place of the federated learning term
-client. In conventional federated learning a client holds data and trains a
-copy of a shared model \autocite{mcmahan_fedavg_2017}; here a provider holds a model
-and is never asked to train anything. The two settings share the constraint that the
-data behind each party stays with that party.
 
 A tokenizer maps a string to a sequence of tokens drawn from a finite vocabulary
 $\mathcal{V}$. Models from different families generally use different tokenizers, so
-the student vocabulary $\mathcal{V}_S$ and a provider vocabulary $\mathcal{V}_k$
-differ and their next-token distributions are not defined over a common support.
+their next-token distributions are not defined over a common support.
 
 \begin{Definitions}[White-box and black-box access]
 A provider is white-box accessible if, for any context $c$, its next-token
-distribution $p_k(\cdot \mid c)$ over $\mathcal{V}_k$ can be read. It is
-black-box accessible if it can be queried only as a sampling oracle: given a
-text prompt $c$, it returns generated text $y \sim M_k(\cdot \mid c)$, and neither its
-logits, its vocabulary, nor its tokenizer are observable.
+distribution $p_k(\cdot \mid c)$ over its vocabulary can be read. It is black-box
+accessible if it can be queried only as a sampling oracle: given a text prompt $c$, it
+returns generated text $y \sim M_k(\cdot \mid c)$, and neither its logits nor its
+tokenizer are observable.
 \end{Definitions}
 
-All providers in this report are treated as black-box, including those whose weights
-happen to be public. Under black-box access the student and a provider interact only
-through text, and the cross-tokenizer problem does not arise.
-
-\begin{Definitions}[Query and cost]
-A query is a single prompt sent to one provider together with the response it
-returns. A query to $M_k$ costs $c_k$, and a training run is budget-feasible if
-the total cost of its queries does not exceed $B$. Queries issued to a fixed local
-model that is not a provider, such as a verifier, are not charged against $B$ but are
-reported separately.
-\end{Definitions}
+The refined problem of this thesis assumes white-box providers that share the student's
+tokenizer. The preliminary study of Chapter~\ref{chap:Evaluation} treated every
+provider as black-box.
 
 \subsection{On-Policy Distillation}
 
@@ -103,8 +86,8 @@ The reward function $R$ is a design choice. It may be a learned discriminator
 \autocite{ye_gad_2025}, a rubric induced from the contrast between provider and
 student responses and checked by a verifier \autocite{fang_ropd_2026}, or a
 similarity between the student's continuation and provider continuations
-\autocite{zhou_omniopd_2026}. The choice used in this report is specified in
-Chapter~\ref{chap:Implementation}.
+\autocite{zhou_omniopd_2026}. The preliminary study of Chapter~\ref{chap:Evaluation} uses agreement with the
+provider's final answers.
 
 \subsection{Group Relative Policy Optimization}
 
@@ -145,130 +128,80 @@ the KL penalty. If every rollout in a group receives the same reward, all advant
 are zero and the group contributes no gradient. A provider whose responses lead to
 uniform rewards on a domain therefore teaches nothing there, however strong it is.
 
-\subsection{Selection}
+\subsection{Curricula and Selection}
 
-\begin{Definitions}[Arm, round and selector]
-An arm is a provider--domain pair $a = (k, d)$. In each round $t$ the
-selector chooses an arm $a_t$, possibly holding the same arm for a block of several
-rounds, a batch of prompts from $\mathcal{X}_{d_t}$ is answered by $M_{k_t}$, and the
-student is updated on the result. A selector is a policy
-$\pi_{\mathrm{sel}}$ that maps the history of contexts, arms and rewards to the next
-arm.
+\begin{Definitions}[Arm, round, selector and curriculum]
+An arm is a provider--domain pair $a = (k, d)$. In each round $t$ the selector
+chooses an arm $a_t$, possibly holding the same arm for a block of several rounds, and
+the student is updated on a batch of prompts from $\mathcal{X}_{d_t}$ under the
+supervision of $M_{k_t}$. A selector is a policy $\pi_{\mathrm{sel}}$ that maps the
+history of contexts, arms and rewards to the next arm. The sequence of arms it produces
+is the curriculum.
 \end{Definitions}
 
 \begin{Definitions}[Marginal value]
 The marginal value of arm $(k, d)$ at student state $\theta$ is the expected gain in
-utility per unit cost from one round on that arm,
-$v(k, d; \theta)$, as defined in Section~\ref{sec:Problem Statement}. An arm is
-dominant at $\theta$ if its marginal value is at least that of every other arm.
+utility from one round on that arm, $g(k, d; \theta)$, as defined in
+Section~\ref{sec:Problem Statement}. An arm is dominant at $\theta$ if its marginal
+value is at least that of every other arm.
 \end{Definitions}
 
-\begin{Definitions}[Static and adaptive allocation]
-A static allocation fixes, before training, the fraction of the budget spent
-on each arm, and draws arms in proportion. An adaptive allocation chooses each
-arm using rewards observed during the same run. The best static allocation in
-hindsight is the static allocation that attains the highest final utility among a
-fixed candidate set, chosen after all candidates have been run.
+\begin{Definitions}[Fixed and adaptive curricula]
+A fixed curriculum is decided before training, for example a single arm, a uniform
+rotation over arms, or a set order of providers. An adaptive curriculum chooses each
+arm using feedback observed during the same run.
 \end{Definitions}
 
-\begin{Definitions}[Reward signal]
-The selection reward $r_t$ is the scalar fed back to the selector after round
-$t$. It is utility-based if it is the change in utility on the selection set,
-$U_{\mathrm{sel}}(\theta_t) - U_{\mathrm{sel}}(\theta_{t-1})$, and a proxy
-otherwise, for instance the reduction in training loss or a measure of disagreement
-between student and provider.
+\begin{Definitions}[Learning curve]
+The learning curve of a run is its utility as a function of the number of prompts the
+student has trained on. Curricula are compared by their learning curves.
 \end{Definitions}
 
-The selection reward is distinct from the on-policy reward $r_i$ of the black-box
-update. The former scores a round for the selector; the latter scores a single
-student rollout for the optimiser.
+The selector's feedback is distinct from the reward of the student's update. The former
+scores a block of rounds for the selector, by the change in accuracy on the selection
+set; the latter scores a single student response for the optimiser.
 
 \section{Literature Review}
 \label{sec:Literature Review}
 
-This section surveys the work on which provider-selective on-policy distillation
-builds. Section~\ref{sec:lr-fl} covers federated learning and federated distillation,
-and Section~\ref{sec:lr-fedllm} their extension to language model adaptation.
-Section~\ref{sec:lr-opd} covers on-policy distillation and its black-box variants,
-and Section~\ref{sec:lr-multiteacher} methods that distil several teachers into one
-student. Section~\ref{sec:lr-fedopd} covers the first work to combine federated
-collaboration with on-policy distillation. Section~\ref{sec:lr-selection} covers work
-on choosing among sources under a budget, and Section~\ref{sec:lr-gap} states the
-resulting gap.
+This section surveys the work on which provider-selective distillation builds.
+Section~\ref{sec:lr-curriculum} covers curriculum learning, Section~\ref{sec:lr-opd}
+on-policy distillation, Section~\ref{sec:lr-multiteacher} methods that distil several
+teachers into one student, and Section~\ref{sec:lr-selection} the bandit tools a
+curriculum over teachers can draw on. Section~\ref{sec:lr-gap} states the resulting
+gap.
 
-\subsection{Federated learning and federated distillation}
-\label{sec:lr-fl}
+\subsection{Curriculum learning}
+\label{sec:lr-curriculum}
 
-Federated learning trains a shared model across parties whose data cannot be pooled.
-In Federated Averaging (FedAvg), each client runs several local gradient steps on its
-own data and a server averages the resulting parameters
-\autocite{mcmahan_fedavg_2017}. Averaging parameters requires every client to train
-the same architecture and to disclose its weights, and the weights themselves can
-leak information about the data on which they were trained.
+Curriculum learning trains a model on examples ordered from easy to hard by a fixed
+measure of difficulty, and was shown to speed convergence and improve the solutions
+found \autocite{bengio_curriculum_2009}. Self-paced learning removes the external
+measure by letting the model's own loss decide which examples are easy enough to
+include \autocite{kumar_selfpaced_2010}.
 
-Federated distillation relaxes both requirements by exchanging predictions in place
-of parameters. In FedMD, clients with heterogeneous architectures share their class
-scores on a public dataset, and each client distils the averaged scores into its own
-model \autocite{li_fedmd_2019}. FedDF moves the distillation to the server, which
-fuses an ensemble of client models into one by distilling their averaged outputs on
-unlabelled data, and converges in fewer rounds than FedAvg
-\autocite{lin_feddf_2020}. Selective-FD observes that an ensemble of client
-predictions is only as useful as its members, and filters out ambiguous or
-out-of-distribution predictions before they reach the student
-\autocite{shao_selectivefd_2024}.
+Automated curriculum learning replaces the fixed order with a decision made during
+training. A bandit chooses the next task and is rewarded by a measure of the learner's
+progress on it, such as the change in loss or accuracy
+\autocite{graves_curriculum_2017}. Teacher-student curriculum learning uses the slope of
+the learning curve on each task as that reward, and also returns to tasks whose
+performance is falling \autocite{matiisen_tscl_2017}. In reinforcement learning,
+Prioritized Level Replay revisits the environment levels on which the agent can still
+improve \autocite{jiang_plr_2021}. These methods share the principle that this thesis
+adopts: practise where progress is being made.
 
-Two assumptions in this line of work matter for what follows. Every client is
-consulted on every distillation input, so the only question is how to aggregate what
-the clients return. Communication is the cost being minimised, while the cost of
-asking any particular client is treated as uniform.
+The principle has been carried to language models. Online Data Mixing treats each data
+domain as an arm of an adversarial bandit and adapts sampling weights from the training
+loss on each domain \autocite{albalak_odm_2023}, using the EXP3 algorithm
+\autocite{auer_exp3_2002}. DUET tunes a mixture across complete training runs by
+Bayesian optimisation \autocite{chen_duet_2026}. The Self-Evolving Curriculum chooses
+problem categories during reinforcement learning fine-tuning with a non-stationary
+bandit whose reward is the size of the advantages a category produces
+\autocite{chen_sec_2025}.
 
-\subsection{Federated adaptation of language models}
-\label{sec:lr-fedllm}
-
-Federated learning has since been extended to every stage of language model
-post-training. OpenFedLLM provides a framework for federated instruction tuning and
-federated preference alignment, and reports that federated training on private
-financial data lets a 7B model outperform GPT-4 on a financial benchmark, which
-models trained on a single client's data do not \autocite{ye_openfedllm_2024}.
-FedBiscuit carries reinforcement learning from human feedback into the federated
-setting by training per-client binary selectors in place of a shared reward model,
-and identifies preference heterogeneity across clients and reward hacking as the two
-central difficulties \autocite{wu_fedbiscuit_2025}. With the shift to verifiable
-rewards, GRPO has been federated as well. FedMOA lets each client reweight its
-objectives during local GRPO training and aggregates models by task group
-\autocite{wang_fedmoa_2026}. FedGRPO reverses the direction of transfer: a server-side
-model sends candidate solutions to selected domain clients and aggregates only the
-scalar rewards they return, so that neither data nor model updates leave the clients
-\autocite{zhu_fedgrpo_2026}.
-
-FedGRPO is the closest of these to the present setting in one respect: it decides
-which parties to consult. For each question it retrieves similar auxiliary exemplars,
-asks every client to report its competence on them, and sends the server model's
-answer only to the most competent clients. Selection is therefore driven by each
-client's competence on the question, not by how much the server model gains from
-that client, and consulting a client carries no price beyond communication.
-
-Other work transfers knowledge between language models of different sizes held by
-different parties. FedMKT exchanges token-level predictions between a server-side
-large model and client-side small models, aligning their vocabularies by minimum edit
-distance \autocite{fan_fedmkt_2025}. FedCoT distils chain-of-thought rationales from a
-server-side large model into client-side small models while perturbing the prompts
-sent to the server, so that client data is not exposed in plain text
-\autocite{fan_fedcot_2025}. DP-OPT makes the same concern formal for black-box
-models: it tunes a discrete prompt on a local model under differential privacy and
-transfers only that prompt to a cloud API \autocite{hong_dpopt_2024}. LaDA is the
-federated method closest to the motivation of this thesis. A filter trained during
-distillation predicts which reasoning samples are learnable for each client's small
-model and allocates samples accordingly, and the study finds that a larger server
-model does not necessarily yield a better client model \autocite{guo_lada_2026}.
-LaDA adapts which samples a student receives as the student changes, but each
-client learns from a single server model, so the question of which teacher to
-consult does not arise.
-
-Federated work on agents remains in-context rather than parametric. FICAL exchanges
-textual knowledge compendia describing tool use, in place of model parameters, and
-uses the aggregated compendium as a teacher for each client's agent
-\autocite{wu_fical_2024}.
+All of these choose what to practise, and their sources are fixed tasks or datasets.
+None chooses whom to learn from. In distillation the teacher is a second axis of the
+curriculum, and its usefulness depends on the student.
 
 \subsection{On-policy distillation}
 \label{sec:lr-opd}
@@ -294,7 +227,8 @@ probability vectors under an optimal-transport distance \autocite{boizard_uld_20
 and GOLD combines the two in an on-policy trainer \autocite{patino_gold_2025}. Any
 fixed alignment between tokenizers nevertheless discards supervision where the two
 segmentations disagree \autocite{sun_simct_2026,phan_tokenization_bias_2025}. The
-motivating experiment in Chapter~\ref{chap:Evaluation} measures this loss directly.
+motivating experiment of Section~\ref{pre:sec:motivating} measures this loss directly,
+and is the reason the providers of the refined problem share the student's tokenizer.
 
 Black-box on-policy distillation removes logit access altogether. Generative
 Adversarial Distillation (GAD) trains a discriminator to distinguish teacher from
@@ -305,8 +239,12 @@ verifier that is not told which model produced the response, and reports up to a
 tenfold gain in sample efficiency over logit-based baselines across model families
 \autocite{fang_ropd_2026}. OmniOPD supervises the student below the level of the full
 response, by scoring high-entropy chunks of the student's reasoning against
-continuations sampled from the teacher \autocite{zhou_omniopd_2026}. Each of these
-methods assumes a single teacher that is queried on every training prompt.
+continuations sampled from the teacher \autocite{zhou_omniopd_2026}. A study of on-policy distillation across federated clients shows that the student's
+progress changes what it can next learn from its teacher, because the student generates
+its own future training data \autocite{chen_fedtops_2026}; this is an instance of
+performative prediction \autocite{perdomo_performative_2020} and the mechanism behind
+hypothesis H2. Each of these methods assumes a single teacher that is consulted on every
+training prompt.
 
 \subsection{Multi-teacher on-policy distillation}
 \label{sec:lr-multiteacher}
@@ -324,173 +262,105 @@ debate among several teachers and weights each teacher's supervision by its
 post-debate confidence, which lets a 4B student exceed its own 14B teacher on
 LiveCodeBench \autocite{wang_madopd_2026}.
 
-These methods share three assumptions that the present setting does not. Every
-teacher is white-box and shares the student's vocabulary. Every teacher is available
-on every prompt at no marginal cost. The routing or weighting rule is fixed by domain
+A stronger teacher is not always a better one. A teacher that is much larger than the
+student can teach worse than a smaller one, which motivated inserting a mid-sized
+teacher assistant between the two \autocite{mirzadeh_ta_2020}, and the same effect has
+been measured for small language models learning from strong reasoners
+\autocite{li_learnability_gap_2025}.
+
+In the multi-teacher methods above, the routing or weighting rule is fixed by domain
 labels or by a property of the teachers, and is not learned from how much the student
 gains. An earlier line of work did learn whom to ask: RL-KD uses reinforcement
 learning to assign weights to several teachers separately for each training instance
 \autocite{yuan_rlkd_2021}. That selection was made for off-policy distillation of
-task-specific models, with every teacher available at no cost.
+task-specific models. Federated distillation likewise combines the predictions of
+several parties, by averaging them on shared inputs
+\autocite{li_fedmd_2019,lin_feddf_2020,fan_fedmkt_2025}, and every party is consulted
+on every input.
 
-\subsection{Federated on-policy distillation}
-\label{sec:lr-fedopd}
-
-The first work to combine on-policy distillation with federated collaboration studies
-clients that hold disjoint prompt sets and share a single fixed teacher
-\autocite{chen_fedtops_2026}. Each client runs on-policy distillation locally and a
-server averages the resulting adapters. The study finds that FedAvg can perform no
-better than independent local training at a small learning rate and clearly better at
-a larger one. It attributes this to the student's dual role as learner and as
-generator of its own future training data: averaging slows progress on a
-prerequisite ability, which delays the student's arrival at states where the teacher's
-supervision is useful, which in turn slows later learning. The proposed method,
-FedTOPS, uses the teacher's agreement with the averaged model on cached rollouts to
-choose how far to move along the averaged update, and improves macro accuracy over
-FedAvg by 4.6 to 14.6 percentage points across six mathematical reasoning
-benchmarks.
-
-The mechanism this work identifies is an instance of performative prediction, in
-which a model's deployment changes the distribution of data on which it is next
-trained \autocite{perdomo_performative_2020}. It is also the mechanism behind
-hypothesis H2 of this thesis. If what the student can learn from a teacher depends on
-the states the student currently reaches, then which teacher is most useful should
-also depend on those states. The FedTOPS setting does not test this, because it has
-only one teacher, white-box access, and no query costs. Its federated parties hold
-prompts rather than models.
-
-\subsection{Choosing sources under a budget}
+\subsection{Bandits whose arms change the learner}
 \label{sec:lr-selection}
 
-Federated learning has its own selection problem, that of choosing which clients
-participate in each round. Oort selects clients by an estimate of each client's
-statistical utility and system speed \autocite{lai_oort_2021}, and biasing selection
-toward clients with higher local loss has been shown to speed convergence
-\autocite{cho_powerofchoice_2022}. In both cases the selected clients train the shared
-model, and the utility estimate is a proxy computed from training loss.
+Bandit theory supplies tools for several features of the problem. Discounted and
+sliding-window upper-confidence-bound algorithms track arms whose reward distributions
+change over time \autocite{garivier_ducb_2011}, and discounted Thompson sampling does
+the same in a Bayesian form \autocite{raj_dts_2017}. Contextual bandits such as LinUCB
+condition the choice of arm on an observed feature vector \autocite{li_linucb_2010},
+which here can summarise the student's state. None of these models the case in which
+the selector's own actions cause the change in rewards. Rotting bandits come closest:
+the reward of an arm decays as that arm is pulled \autocite{levine_rotting_2017}. This
+captures diminishing returns from a single source, but not the coupling present here,
+where pulling any arm changes the student and with it the value of every other arm.
 
-Outside federated learning, the closest problem is data mixing. Online Data Mixing
-treats each data domain as an arm of an adversarial bandit and adapts sampling
-weights from the training loss on each domain \autocite{albalak_odm_2023}, using the
-EXP3 algorithm \autocite{auer_exp3_2002}. DUET tunes a mixture across complete
-training runs by Bayesian optimisation against noisy feedback from downstream tasks
-\autocite{chen_duet_2026}. In both, the sources are fixed datasets and drawing from a
-source has no price beyond the compute it consumes.
-
-Bandit theory supplies the tools for the remaining features of the problem. Bandits
-with knapsacks attach a resource consumption to each arm and stop when a budget is
-exhausted \autocite{badanidiyuru_bwk_2013}. Discounted and sliding-window
-upper-confidence-bound algorithms track arms whose reward distributions change over
-time \autocite{garivier_ducb_2011}. Contextual bandits such as LinUCB condition the
-choice of arm on an observed feature vector \autocite{li_linucb_2010}, which here can
-summarise the student's state. None of these models the case in which the selector's
-own actions cause the change in rewards. Rotting bandits come closest: the reward of an
-arm decays as that arm is pulled \autocite{levine_rotting_2017}. This captures
-diminishing returns from a single source, but not the coupling present here, where
-pulling any arm changes the student and with it the value of every other arm.
-
-Two further lines of work estimate the value of a source without training on it.
-Active learning from multiple oracles learns each labeller's accuracy and queries the
-most reliable \autocite{donmez_iethresh_2009}. LLM routing learns to send each query
-to the cheapest model likely to answer it well \autocite{ong_routellm_2025}. Both
-measure a source's quality, not its fit to a learner. The evidence that small
-students learn less from strong reasoners than from simpler ones suggests these can
-differ \autocite{li_learnability_gap_2025}. Once a run is complete, the contribution
-of each party can be valued after the fact \autocite{sim_cml_2020}, which provides a
-reference against which a selector's spending can be compared.
+LLM routing learns to send each query to the cheapest model likely to answer it well
+\autocite{ong_routellm_2025}. It measures a model's quality, not its fit to a learner,
+and the evidence that small students learn less from strong reasoners than from simpler
+ones suggests the two can differ \autocite{li_learnability_gap_2025}.
 
 \subsection{The gap}
 \label{sec:lr-gap}
 
-Table~\ref{tab:lr-gap} positions the closest methods against the five properties of
-provider-selective distillation stated in Section~\ref{sec:Motivation}, together with
-whether the student is trained on-policy.
+Table~\ref{tab:lr-gap} positions the closest methods.
 
 \begin{table}[H]
 \centering
-\small
-\setlength{\tabcolsep}{4pt}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{|l|c|c|c|c|c|c|}
-\hline
-\textbf{Method} & \textbf{Black-box} & \textbf{Private} & \textbf{Hetero.}
-  & \textbf{Costly} & \textbf{State-dep.} & \textbf{On-policy} \\
-\hline
-FedDF \autocite{lin_feddf_2020}            & -- & \checkmark & \checkmark & --  & -- & -- \\
-FedMKT \autocite{fan_fedmkt_2025}          & -- & \checkmark & \checkmark & --  & -- & -- \\
-LaDA \autocite{guo_lada_2026}              & -- & \checkmark & -- & -- & \checkmark & -- \\
-FedGRPO \autocite{zhu_fedgrpo_2026}        & \checkmark & \checkmark & \checkmark & -- & -- & \checkmark \\
-FedTOPS \autocite{chen_fedtops_2026}       & -- & \checkmark & -- & -- & -- & \checkmark \\
-ROPD \autocite{fang_ropd_2026}             & \checkmark & -- & -- & -- & -- & \checkmark \\
-MOPD \autocite{ma_mopd_2026}               & -- & -- & \checkmark & -- & -- & \checkmark \\
-TrustMOPD \autocite{sun_trustmopd_2026}    & -- & -- & \checkmark & -- & -- & \checkmark \\
-Online Data Mixing \autocite{albalak_odm_2023} & n/a & -- & \checkmark & -- & \checkmark & -- \\
-\hline
-\textbf{This thesis} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
-\hline
-\end{tabular}}
-\caption{Positioning of related methods against the properties of
-provider-selective on-policy distillation. Hetero.: the student can draw on
-more than one source of differing competence. Costly: sources carry a
-per-query price under a budget. State-dep.: what the student is given is
-revised from the student's progress during training. LaDA and Online Data Mixing
-adapt during training, but over samples or datasets rather than over teachers.}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Several} & \textbf{On-policy} & \textbf{Chooses} &
+  \textbf{Chooses} & \textbf{Learned from} \\
+ & \textbf{teachers} & \textbf{distillation} & \textbf{teacher} & \textbf{domain} &
+  \textbf{progress} \\
+\midrule
+TSCL \autocite{matiisen_tscl_2017}                & -- & -- & -- & \checkmark & \checkmark \\
+Self-Evolving Curriculum \autocite{chen_sec_2025} & -- & -- & -- & \checkmark & \checkmark \\
+Online Data Mixing \autocite{albalak_odm_2023}    & -- & -- & -- & \checkmark & \checkmark \\
+GKD \autocite{agarwal_gkd_2024}                   & -- & \checkmark & -- & -- & -- \\
+MOPD \autocite{ma_mopd_2026}                      & \checkmark & \checkmark & \checkmark & -- & -- \\
+TrustMOPD \autocite{sun_trustmopd_2026}           & \checkmark & \checkmark & \checkmark & -- & -- \\
+\midrule
+This thesis                                       & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}
+\caption{Positioning of related methods. TSCL is teacher-student curriculum learning.
+Learned from progress: the choice is revised during training from a signal of how much
+the student is learning. MOPD and TrustMOPD choose the teacher by a fixed rule.}
 \label{tab:lr-gap}
 \end{table}
 
-Three observations follow. First, federated methods that combine heterogeneous
-language models either consult every party on every input or select parties by their
-competence on the input, never by what the learner gains, and treat consultation as
-free. Second, multi-teacher on-policy methods route or weight
-teachers by domain labels or by properties of the teachers, never by what the student
-gains, and assume white-box teachers that are free to query. Third, the one study of
-federated on-policy distillation shows that the student's progress changes what it
-can next learn from a teacher, but has a single teacher and so cannot ask which
-teacher to consult.
-
-No existing method chooses among several black-box providers, at a price, according
-to the student's current state, while training the student on its own rollouts. This
-is the gap addressed by this thesis.
+Two observations follow. First, curriculum methods choose what to practise from the
+learner's progress, but their sources are tasks or datasets, not teachers. Second,
+multi-teacher on-policy methods choose or weight teachers by domain labels or by
+properties of the teachers, never by what the student gains. No existing method chooses
+both the teacher and the domain from the student's own progress while training the
+student on its own responses. This is the gap addressed by this thesis.
 
 \section{Contributions}
 \label{sec:Contributions}
 
-This thesis makes the following contributions.
+This thesis makes the following contributions. The first three are complete; the last
+two are in progress.
 
 \begin{enumerate}[itemsep=2pt,topsep=4pt]
-  \item \textbf{Problem formulation.} It formalises provider-selective on-policy
-    distillation as a budgeted sequential decision problem over student states, and
-    identifies the marginal value $v(k, d; \theta)$ as the quantity a selector must
-    estimate (Section~\ref{sec:Problem Statement}).
-  \item \textbf{Testbed.} It provides a reproducible testbed comprising a small open
-    student, black-box providers that differ in domain competence, size and price,
-    one deliberately degraded provider, cached provider responses, and verifiable
-    tasks (Chapter~\ref{chap:Implementation}).
-  \item \textbf{Empirical tests of non-dominance and state dependence.} It measures
-    marginal value by branching training from shared student checkpoints, and tests
-    whether the most valuable provider differs across domains (H1) and changes over
-    training (H2) (Chapter~\ref{chap:Evaluation}).
-  \item \textbf{Analysis of agreement rewards.} It shows that a student rewarded for
-    agreeing with a provider's answers is pulled, on each prompt, towards the provider's
-    most common answer, so that a provider's majority-vote accuracy rather than its
-    single-response accuracy measures its quality as a teacher, and that the student can
-    nonetheless pass that level by generalising across prompts. It measures that such rewards carry about
-    as much learning signal as ground truth on mathematics and code, and that judging
-    providers by their agreement with one another favours the model family that makes
-    up most of the pool (Chapter~\ref{chap:Implementation}).
-  \item \textbf{A headroom-per-cost selector.} It proposes a selector that scores each
-    arm by the gap between the provider's ceiling and the student's current accuracy,
-    scaled by a learned estimate of how much progress that gap buys and divided by the
-    provider's price. Because prices and ceilings are fixed before
-    training, the selector yields testable predictions of H1 and H2, including the
-    student accuracy at which the best provider should change
+  \item \textbf{Problem formulation.} It formalises provider-selective distillation as
+    a curriculum over pairs of provider and domain, and identifies the marginal value
+    $g(k, d; \theta)$ as the quantity a selector must estimate
+    (Section~\ref{sec:Problem Statement}).
+  \item \textbf{Testbed.} It provides a reproducible testbed with a small open student,
+    providers of differing competence and three domains with verifiable answers
     (Chapter~\ref{chap:Implementation}).
-  \item \textbf{Selectors and baselines.} It evaluates the headroom-per-cost selector and
-    other budget-aware adaptive selectors against uniform, strongest-only, cheapest-only
-    and best-static allocations, with a greedy oracle as an upper reference, to test
-    whether adaptivity pays (H3).
-  \item \textbf{Reward signals and allocation analysis.} It compares utility-based
-    selection rewards with the training-loss proxies used in data mixing and
-    federated distillation, and compares each provider's share of the budget with a
-    post hoc valuation of its contribution, including under a degraded provider.
+  \item \textbf{A preliminary study with priced black-box providers.} It measures
+    provider value by branching training from shared student checkpoints, and finds
+    that providers of very different strength teach at a similar rate per gradient
+    step, that a selector must learn from realised progress and not from headroom, and
+    that learning from answer agreement alone is confined to one domain and unstable
+    (Chapter~\ref{chap:Evaluation}).
+  \item \textbf{A training framework for several white-box teachers.} It proposes an
+    objective that combines a ground-truth reward with the selected provider's token
+    probabilities, and a selector that scores each arm by its learned gain per round
+    (Chapter~\ref{chap:Implementation}).
+  \item \textbf{Evaluation by learning curves.} It compares adaptive curricula with
+    fixed ones and tests whether a student trained on several providers passes the best
+    single provider (Chapter~\ref{chap:Plan}).
 \end{enumerate}

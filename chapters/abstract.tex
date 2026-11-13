@@ -1,21 +1,37 @@
 \begin{abstract}
-\noindent % Prevents indenting at the start of the paragraph
-Your abstract goes here, maximum 200 words.
+\noindent
+Small language models are increasingly trained by distilling from larger models, and
+several such models are often available. The student must then decide which one to learn
+from, on which domain, and when; the common default is the strongest throughout. This
+thesis treats the decision as a curriculum learning problem over pairs of provider and
+domain, termed provider-selective distillation, in which the next pair is chosen from the
+progress the student actually makes. A preliminary study with text-only providers and a
+price on every query, using a 1.5B-parameter student, five providers and three domains,
+finds that providers of very different strength teach at a similar
+rate per gradient step, so that price decided value and the strongest provider was the
+worst single choice. A selector that learns where progress happens matches the best single
+provider (test utility 0.500 against 0.494) without being told which one it is. Learning
+was confined to one domain and unstable. The thesis then studies a refined
+problem without a budget, in which the student reads the providers' token probabilities,
+and proposes a training framework that combines a ground-truth reward with supervision
+from the selected provider, with the aim of a student that passes its teachers.
 
 \vspace{5mm}
 Subject Descriptors:
 \begin{list}{\quad}{}
-    \item D.2.4 Software/Program Verification
-    \item D.2.5 Testing and Debugging
+    \item I.2.6 Learning
+    \item I.2.7 Natural Language Processing
+    \item G.3 Probability and Statistics
 \end{list}
 
 Keywords: \\
-\tab Foo, Bar, Baz
+\tab On-policy distillation, curriculum learning, multi-teacher distillation,
+multi-armed bandits
 
 Implementation Software and Hardware:
 \begin{list}{\quad}{}
-    \item Hardware
-    \item Software
+    \item Python 3.12, PyTorch, vLLM, TRL, PEFT, Math-Verify, bubblewrap
+    \item NVIDIA L40 GPUs (shared server); SoC Slurm cluster (A100, H100)
 \end{list}
 \end{abstract}
 \pagebreak

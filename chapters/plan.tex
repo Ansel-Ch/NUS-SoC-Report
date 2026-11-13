@@ -1,0 +1,94 @@
+\chapter{Planned Evaluation}
+\label{chap:Plan}
+
+The refined problem has not yet been run. This chapter sets out the experiments that
+will test it, in the order in which they depend on one another. For each hypothesis the
+decision rule is stated before the results.
+
+\section{Pilot without a Budget}
+\label{plan:sec:pilot}
+
+The pilot isolates three of the changes of the refined problem from the fourth. It
+removes the budget, raises the batch to 100 prompts per round and uses the selector of
+Section~\ref{imp:sec:efficiency}, but keeps the agreement reward of the preliminary
+study, because the provider term of the new objective is not yet built. It compares
+uniform allocation with the selector on the three providers of
+Table~\ref{imp:tab:pool}, with one seed, at the configuration of
+Table~\ref{imp:tab:config}: 100 rounds of 100 prompts, a decision every 5 rounds, and
+the full selection set at every decision. Each condition is run at learning rates of
+$2 \times 10^{-5}$ and $10^{-4}$, which gives four runs and about 20 GPU-hours.
+
+The pilot answers three questions. Does the student still learn with 12 times fewer
+gradient steps for the same prompts, and at which learning rate? Is the gain of one
+block now larger than the evaluation noise? Does the selector's learning curve separate
+from uniform allocation's? At the time of writing the four runs are queued and no result
+is available.
+
+\section{Experiments}
+\label{plan:sec:experiments}
+
+\begin{description}[itemsep=4pt,topsep=4pt]
+  \item[Experiment 1: the training objective.] Compare the reward term alone, the
+    provider term alone and their sum (Equation~\ref{imp:eq:total}), for each provider
+    separately, by learning curves and by the response-length statistics that revealed
+    the collapse in the preliminary study. The objective is adopted if the sum is at
+    least as good as either term alone and no run collapses.
+  \item[Experiment 2: progress on MATH and code.] With the adopted objective, test
+    whether the student's accuracy on MATH and code rises above its starting point by
+    more than the 95\% interval of the evaluation. If it does not, repeat with a larger
+    student. Without progress outside Countdown, a curriculum has only one domain worth
+    choosing.
+  \item[Experiment 3: non-dominance and state dependence (H1, H2).] Measure the
+    marginal value of every arm by branching from shared checkpoints, as in
+    Section~\ref{pre:sec:branching}, with longer branches and per-item results so that
+    providers are compared on the same items within each seed. H1 is supported if, at
+    some checkpoint, the best provider differs between two domains with paired intervals
+    that exclude zero; H2 if, within a domain, it differs between two checkpoints.
+  \item[Experiment 4: adaptive against fixed curricula (H3).] Compare the selector with
+    the reference curricula of Section~\ref{imp:sec:baselines} over three seeds. H3 is
+    supported if the selector reaches the final utility of the best fixed curriculum
+    with fewer training prompts, with a paired interval that excludes zero.
+  \item[Experiment 5: passing the teachers (H4).] Compare the student trained on
+    several providers with the student trained on the best single provider, and with
+    each provider's own accuracy in Table~\ref{imp:tab:pool}. H4 is supported if the
+    former exceeds the best single-provider student on test utility with a paired
+    interval that excludes zero.
+  \item[Experiment 6: external check.] Evaluate the final students on standard
+    mathematics benchmarks outside the training pool, as an out-of-distribution check.
+\end{description}
+
+\section{Schedule, Resources and Risks}
+\label{plan:sec:schedule}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Task} & \textbf{Nov} & \textbf{Dec} & \textbf{Jan} & \textbf{Feb} & \textbf{Mar} & \textbf{Apr} \\
+\midrule
+Pilot without a budget           & \textbullet &             &             &             &             &   \\
+1. Training objective            & \textbullet & \textbullet &             &             &             &   \\
+2. Progress on MATH and code     &             & \textbullet & \textbullet &             &             &   \\
+3, 4. H1, H2 and curricula       &             &             & \textbullet & \textbullet &             &   \\
+5. Passing the teachers          &             &             &             & \textbullet & \textbullet &   \\
+6. External check                &             &             &             &             & \textbullet &   \\
+Dissertation and presentation    &             & \textbullet &             &             & \textbullet & \textbullet \\
+\bottomrule
+\end{tabular}
+\caption{Schedule for the remaining work.}
+\label{plan:tab:schedule}
+\end{table}
+
+\paragraph{Resources.} The preliminary study used about 110 L40 GPU-hours. The remaining
+work is estimated at about 210: 20 for the pilot, 40 to develop the objective, 40 for
+MATH and code, 100 for the curriculum comparison over three seeds, and 10 for the
+external check. These are estimates made before the pilot has run.
+
+\paragraph{Risks.} The main risk is that learning stays confined to Countdown under the
+new objective, which would leave the curriculum only one domain worth choosing and
+narrow the claims. The second is that, without a budget, every reasonable curriculum
+reaches the same accuracy and differs only in speed; learning curves are the headline
+metric for that reason. The third is that the three providers are too alike for the
+choice between them to matter, in which case a provider of another family would be
+added through a text-only reward.
