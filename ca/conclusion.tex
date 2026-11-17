@@ -1,0 +1,28 @@
+\chapter{Conclusion}
+\label{ca:chap:conclusion}
+
+In this report, we introduced provider-selective distillation, a curriculum over providers
+and domains in which a small student chooses whom to learn from, about what, and when, and
+we studied its first version, with priced black-box providers. So far we find that logits
+help only when the tokenizer is shared, that price rather than provider strength decides
+value under a budget, and that a selector which learns where progress happens matches the
+best single provider without being told which one it is. Learning was confined to
+Countdown and was unstable. These findings led us to refine the problem: no budget,
+white-box providers of the student's family, and learning curves as the measure. Next
+semester we will build a training objective that combines ground truth with the providers'
+token probabilities, seek progress on MATH and code, and test whether a curriculum over
+several providers lets the student pass its teachers.
+
+\chapter*{Limitations}
+\addcontentsline{toc}{chapter}{Limitations}
+\label{ca:chap:limitations}
+
+While the testbed lets us measure provider value directly, it simulates the setting rather
+than reproducing it. Providers are open models that answer from a fixed cache of four
+responses per prompt, prices are a compute-based proxy rather than real API prices, and
+three of the five real providers share the student's model family. The student learns
+almost only on Countdown at this scale, so most of our evidence comes from one domain. Three
+seeds give wide intervals. We also did not vary the student's size, run more than one
+budget, or study multi-turn agentic tasks. The
+refined problem has not yet been run: every result here comes from the budgeted, black-box
+version.

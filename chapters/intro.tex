@@ -5,85 +5,80 @@
 \label{sec:Motivation}
 
 Much of the knowledge a practitioner would like to train on is no longer available
-as data. Hospitals, banks and firms bound by privacy regulation or commercial
-interest rarely release their datasets, but they increasingly expose models trained
-on them, either through an interface or as open weights. Alongside these sit
-general-purpose and specialised models from many developers. For anyone training a
-small language model, the resource at hand is therefore less often a dataset to
-download and more often a collection of models to query.
+as data. Hospitals, banks and firms rarely release their datasets, but they
+increasingly expose models trained on them, through an interface or as open weights.
+Alongside these sit general-purpose and specialised models from many developers. For
+anyone training a small language model, the resource at hand is therefore less often
+a dataset to download and more often a collection of models to learn from, each with
+its own competence. On-policy distillation, in which the student learns from its own
+responses as scored by a teacher \autocite{agarwal_gkd_2024,gu_minillm_2024}, is a
+natural way to learn from such models.
 
-Federated learning was introduced to learn from data that cannot be centralised
-\autocite{mcmahan_fedavg_2017}. Its answer was to move parameters rather than data,
-which requires every party to train the same architecture and to expose its
-weights. Federated distillation relaxed the first requirement by exchanging
-predictions on a shared public dataset in place of parameters
-\autocite{li_fedmd_2019,lin_feddf_2020}, and recent work carries this exchange over
-to language models of different sizes and tokenizers
-\autocite{fan_fedmkt_2025,guo_lada_2026}. In each case every source is consulted on
-every input, and the open question is only how to combine what the sources return.
+Deciding what a learner should practise next is the subject of curriculum learning
+\autocite{bengio_curriculum_2009}. Automated curricula treat the decision as a bandit
+problem in which a task is rewarded by the progress the learner makes on it
+\autocite{graves_curriculum_2017,matiisen_tscl_2017}, and the idea has recently been
+applied to the fine-tuning of language models, with problem categories as the tasks
+\autocite{chen_sec_2025}. Distillation from several models adds a second decision to
+the curriculum: not only what to practise, but whom to learn it from.
 
-Once sources are models behind an interface, that assumption becomes expensive.
-Every query costs money, latency or a share of a provider's capacity, and providers
-differ in domain, quality and price. The natural heuristic is to query the strongest
-available model. The evidence suggests this is a poor rule for small students:
-models of 3B parameters or fewer often fail to benefit from larger teachers and
-learn more from simpler supervision \autocite{li_learnability_gap_2025}, and in
-federated settings a larger teacher does not necessarily yield a better student
-\autocite{guo_lada_2026}. Which provider is most useful thus depends on what the
-student currently knows, and that changes as the student learns. A student with a
-fixed tutoring budget does not book the most senior professor for every session; it
-chooses tutors according to where it is weak and what it can absorb.
-
-This thesis studies the resulting allocation problem. In the same way that work on
-compute-optimal scaling asked how a fixed compute budget should be divided between
-parameters and data \autocite{hoffmann_chinchilla_2022}, this thesis asks the
+The natural heuristic is to learn from the strongest available model. The evidence
+suggests this is a poor rule for small students: models of 3B parameters or fewer
+often fail to benefit from larger teachers and learn more from simpler supervision
+\autocite{li_learnability_gap_2025}, and a larger teacher does not necessarily yield
+a better student \autocite{guo_lada_2026}. Which provider is most useful thus depends
+on what the student currently knows, and that changes as the student learns. This
+thesis therefore studies a curriculum over pairs of provider and domain, and asks the
 following question.
 
 \begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=8pt,
   innerbottommargin=8pt]
-Given a fixed query budget and a set of black-box providers whose usefulness
-is unknown, domain-dependent and changing, how should a student model decide whom
-to ask, about what, and when?
+Given several white-box providers and different domains, how should a student decide
+whom to ask, about what, and when?
 \end{mdframed}
 
-This setting is termed provider-selective distillation. It differs from the
-settings above in five respects.
+This setting is termed provider-selective distillation. It has four properties.
 
 \begin{description}[itemsep=2pt,topsep=4pt]
-  \item[Black-box providers.] Each provider returns generated text only. Its weights,
-    logits and tokenizer are not observable.
-  \item[Private provider data.] A provider's training data never leaves the provider;
-    only its responses to the student's queries do.
-  \item[Heterogeneous competence.] No provider is assumed to be best in every domain,
-    and the strongest model is not assumed to be the best teacher for the student.
-  \item[Costly queries.] Each query carries a provider-specific price, and total
-    spending is bounded.
-  \item[State-dependent value.] The benefit of a provider's response depends on the
-    student's current parameters, which the selector's own choices change.
+  \item[Several providers.] The student can learn from more than one model, and no
+    provider is assumed to be best in every domain or the best teacher for this
+    student.
+  \item[White-box access.] The student can read a provider's next-token probabilities
+    on any text, which requires the provider to share the student's tokenizer.
+  \item[Several domains.] Prompts come from domains that differ in how much the
+    student can currently learn on them.
+  \item[State-dependent value.] The benefit of learning from a provider on a domain
+    depends on the student's current parameters, which the curriculum's own choices
+    change.
 \end{description}
 
-The last property separates the problem from familiar tools. Online data mixing
-treats sources as fixed datasets and adapts their sampling weights with an
-adversarial bandit \autocite{albalak_odm_2023,auer_exp3_2002}. DUET tunes a mixture
-across complete training runs using Bayesian optimisation
-\autocite{chen_duet_2026}. Active learning from multiple oracles estimates the
-reliability of each labeller but not its fit to the learner
-\autocite{donmez_iethresh_2009}. LLM routing selects a model per query at inference
-time, and no student is trained \autocite{ong_routellm_2025}. In
-provider-selective distillation, by contrast, each decision changes the student and
-with it the value of every provider at the next decision. Learning whom to ask and
-learning from the answer are coupled, and neither can be studied in isolation.
+The last property separates the problem from familiar tools. Online data mixing treats
+sources as fixed datasets and adapts their sampling weights with an adversarial bandit
+\autocite{albalak_odm_2023,auer_exp3_2002}. DUET tunes a mixture across complete
+training runs using Bayesian optimisation \autocite{chen_duet_2026}. LLM routing
+selects a model per query at inference time, and no student is trained
+\autocite{ong_routellm_2025}. In provider-selective distillation, by contrast, each
+decision changes the student and with it the value of every provider at the next
+decision. Learning whom to ask and learning from the answer are coupled.
+
+The project first studied a narrower version of the problem, in which providers
+return only text and every query has a price, so that the curriculum must fit a fixed
+budget. That study is reported in Chapter~\ref{chap:Evaluation}. Its findings led to
+the statement above: under a budget the comparison between providers was decided by
+their prices, an answer-only reward made a provider little more than a noisy label,
+and learning was confined to one domain and unstable
+(Section~\ref{pre:sec:refined}).
 
 \section{Problem Statement}
 \label{sec:Problem Statement}
 
-\paragraph{Setup.} Let $\pi_\theta$ denote a student policy with parameters
-$\theta$, and let $\mathcal{M} = \{M_1, \dots, M_K\}$ denote $K$ providers. Each
-provider is accessible only as a sampling oracle: given a prompt $x$, it returns a
-response $y \sim M_k(\cdot \mid x)$ at a price $c_k > 0$ per query. Prompts are drawn
-from a pool partitioned into $D$ domains,
-$\mathcal{X} = \mathcal{X}_1 \cup \dots \cup \mathcal{X}_D$. The student is evaluated
-by a utility
+\paragraph{Setup.} Let $\pi_\theta$ denote a student policy with parameters $\theta$,
+and let $\mathcal{M} = \{M_1, \dots, M_K\}$ denote $K$ providers. Provider $M_k$ is
+white-box: for any prompt $x$ and partial response $y_{<j}$ the student can read its
+next-token distribution $p_k(\cdot \mid x, y_{<j})$, over a vocabulary shared with the
+student. Prompts are drawn from a pool partitioned into $D$ domains,
+$\mathcal{X} = \mathcal{X}_1 \cup \dots \cup \mathcal{X}_D$, and every prompt has an
+answer that a program can check. The student is evaluated by a utility
 \[
   U(\theta) = \sum_{d=1}^{D} w_d \, \mathrm{Acc}_d(\theta),
 \]
@@ -92,72 +87,63 @@ summing to one.
 
 \paragraph{Interaction.} Training proceeds in rounds. At round $t$ the selector
 observes a context $s_t = \phi(\theta_{t-1})$ summarising the student's state, such as
-its per-domain accuracy on a selection set, and chooses an arm
-$a_t = (k_t, d_t)$. A batch of $b$ prompts is drawn from $\mathcal{X}_{d_t}$ and sent
-to provider $M_{k_t}$, and the student is updated on the returned pairs,
+its per-domain accuracy on a selection set, and chooses an arm $a_t = (k_t, d_t)$, a
+provider and a domain. A batch $S_{k_t,d_t}$ of $b$ prompts is drawn from
+$\mathcal{X}_{d_t}$, the student answers them, and it is updated under the supervision
+of $M_{k_t}$,
 \[
-  \theta_t = \operatorname{Update}\!\Big(\theta_{t-1},
-  \big\{(x_i, y_i)\big\}_{i=1}^{b}\Big),
-  \qquad x_i \sim \mathcal{X}_{d_t}, \quad y_i \sim M_{k_t}(\cdot \mid x_i),
+  \theta_t = \operatorname{Update}\!\big(\theta_{t-1}, S_{k_t,d_t}\big).
 \]
-at a cost of $b\,c_{k_t}$. The selector then receives a reward $r_t$, either the
-change in utility on the selection set or a cheaper proxy for it. Training stops at
-the round $\tau$ after which no further query fits within the budget $B$.
+The sequence of arms $a_1, a_2, \dots$ is the curriculum.
 
 \paragraph{Objective.} A selector is a policy $\pi_{\mathrm{sel}}$ that maps the
-history of contexts, arms and rewards to the next arm. Its objective is
-\[
-  \max_{\pi_{\mathrm{sel}}} \; \mathbb{E}\big[\, U(\theta_\tau) \,\big]
-  \quad \text{subject to} \quad \sum_{t=1}^{\tau} b\, c_{k_t} \le B,
-\]
-where the expectation is over provider sampling, prompt sampling and the stochasticity
-of training. The selection set that supplies rewards is disjoint from the test sets
-on which $U(\theta_\tau)$ is finally reported.
+history of contexts, arms and rewards to the next arm. There is no query budget. The
+scarce resource is the student's own training, so a selector is judged by its learning
+curve, the utility $U(\theta_t)$ as a function of the number of prompts $t\,b$ the
+student has trained on. A good curriculum makes the curve rise quickly and end high:
+for a horizon of $T$ rounds it should attain a high $\mathbb{E}[U(\theta_T)]$, and a
+high utility at every earlier point. The selection set that supplies the selector's
+feedback is disjoint from the test sets on which results are reported.
 
 \paragraph{Marginal value.} The quantity the selector must implicitly estimate is the
-marginal value per unit cost of arm $(k, d)$ at student state $\theta$,
+marginal value of arm $(k, d)$ at student state $\theta$,
 \[
-  v(k, d; \theta) =
-  \frac{\mathbb{E}\big[\, U\big(\operatorname{Update}(\theta, S_{k,d})\big) - U(\theta) \,\big]}
-       {b\, c_k},
+  g(k, d; \theta) =
+  \mathbb{E}\big[\, U\big(\operatorname{Update}(\theta, S_{k,d})\big) - U(\theta) \,\big].
 \]
-where $S_{k,d}$ is a batch of $b$ prompts from $\mathcal{X}_d$ answered by $M_k$. A
-selector that knew $v$ would play the arm of highest marginal value at every round.
-In practice $v$ is unknown, is observed only through noisy rewards, and changes with
-$\theta$, so each observation of an arm's value is partly stale by the time that arm
-is next considered.
-
-If $v$ did not depend on $\theta$, the problem would reduce to a stochastic
-multi-armed bandit with costs. Because the selector's actions change $\theta$, rewards
-are neither stationary nor independent of the selector's past choices. The problem is
-more faithfully a sequential decision problem over student states, for which
-contextual and non-stationary bandits serve as tractable approximations.
+A selector that knew $g$ would play the arm of highest marginal value at every round.
+In practice $g$ is unknown, is observed only through noisy evaluations, and changes
+with $\theta$, so each observation of an arm's value is partly stale by the time that
+arm is next considered. If $g$ did not depend on $\theta$, the problem would reduce to
+a stochastic multi-armed bandit. Because the selector's actions change $\theta$,
+rewards are neither stationary nor independent of the selector's past choices.
 
 \paragraph{Hypotheses.} The formulation is worth studying only if provider value
-actually varies in this way. Three hypotheses are therefore tested before any
-selection method is proposed.
+actually varies in this way, and the framework is worth building only if it helps.
+Four hypotheses are therefore tested.
 
 \begin{description}[itemsep=2pt,topsep=4pt]
   \item[H1 (Non-dominance).] At a fixed student state, the provider of highest
     marginal value differs across domains.
   \item[H2 (State dependence).] Within a fixed domain, the provider of highest
     marginal value changes over the course of training.
-  \item[H3 (Adaptivity pays).] Where H2 holds, an adaptive selector reaches higher
-    utility at equal budget than the best static allocation chosen in hindsight.
+  \item[H3 (Adaptivity pays).] With fewer training prompts, an adaptive curriculum
+    reaches the utility of the best fixed curriculum.
+  \item[H4 (Passing the teachers).] A student trained on several providers ends
+    above one trained on the best single provider, and can exceed the providers' own
+    accuracy.
 \end{description}
 
-H1 alone justifies a static, per-domain allocation. H2 is what makes adaptive
-selection necessary, and H3 is what makes it worthwhile. A negative result on H2 would
-itself be informative, since it would show that a single allocation fixed before
-training is sufficient.
+H1 alone justifies a fixed assignment of providers to domains. H2 is what makes an
+adaptive curriculum necessary, and H3 is what makes it worthwhile. H4 asks whether
+several teachers are worth more than one. H1 to H3 were first tested in the budgeted
+version of the problem (Chapter~\ref{chap:Evaluation}), where value is measured per
+unit of price.
 
-\paragraph{Assumptions.} The following assumptions hold throughout this thesis.
-There is a single student. Providers are honest, though they may be noisy or of low
-quality; they do not act strategically. Provider responses to the prompt pool may be
-generated once and cached, so that querying is simulated without repeated inference.
-The student is updated by black-box on-policy distillation: it is trained on its own
-rollouts, with rewards derived from the returned responses. Supervised fine-tuning on
-the same responses serves as the off-policy baseline.
+\paragraph{Assumptions.} The following assumptions hold for the refined problem. There
+is a single student. Providers are fixed and honest, though they may be weak in some
+domains. Every provider shares the student's tokenizer. Training prompts have checkable
+answers, so a ground-truth reward is available during training.
 
 \section{Objectives and Scope}
 \label{sec:Objectives}
@@ -165,39 +151,35 @@ the same responses serves as the off-policy baseline.
 The objectives of this project are as follows.
 
 \begin{enumerate}[itemsep=2pt,topsep=4pt]
-  \item Formalise provider-selective distillation as stated above, and construct a
-    reproducible testbed comprising a small open student, providers that differ in
-    domain, size and price, and one deliberately degraded provider.
-  \item Measure marginal value empirically, by training from shared student
-    checkpoints on each arm, in order to test H1 and H2.
-  \item Design selection policies and evaluate them against uniform allocation,
-    strongest-provider-only, cheapest-provider-only and the best static allocation
-    in hindsight, with a greedy oracle as an upper reference.
-  \item Compare reward signals, contrasting utility gain on a selection set with the
-    training-loss proxies used in prior data-mixing and federated distillation work.
-  \item Analyse the learned allocations, comparing each provider's share of the
-    budget with a post hoc valuation of its contribution \autocite{sim_cml_2020} and
-    examining robustness to the degraded provider.
+  \item Formalise provider-selective distillation as a curriculum over providers and
+    domains, as stated above.
+  \item Build a reproducible testbed with a small open student, several providers and
+    three domains with checkable answers, and measure provider value in it.
+  \item Design a training objective that combines a reward from ground truth with
+    the selected provider's token probabilities, and that is stable and makes progress
+    in every domain.
+  \item Design curriculum selectors that learn from the student's progress, and
+    compare them with uniform allocation, single providers and fixed orders, by
+    learning curves.
+  \item Test whether a student trained on several providers can pass the best single
+    provider and the providers themselves.
 \end{enumerate}
 
-Four directions lie outside the scope of this project. The first is strategic
-behaviour by providers, which turns the problem into one of mechanism design and
-incentive-aware reward \autocite{sim_cml_2020}; it is discussed in
-Chapter~\ref{chap:Conclusion}. The second is mutual transfer, in which providers also
-improve by learning from the student \autocite{fan_fedmkt_2025}. The third is formal
-privacy guarantees beyond the requirement that provider data never leaves the
-provider. The fourth is logit-level and cross-tokenizer distillation, which the
-black-box assumption makes unnecessary. Evaluation uses single-turn tasks with
-verifiable answers, so that rewards can be computed cheaply and without a learned
-judge.
+Three directions lie outside the scope of this project. The first is strategic
+behaviour by providers, which turns the problem into one of mechanism design
+\autocite{sim_cml_2020}. The second is mutual transfer, in which providers also improve
+by learning from the student \autocite{fan_fedmkt_2025}. The third is distillation
+across tokenizers, which the preliminary study found lossy and fragile
+(Section~\ref{pre:sec:motivating}). Evaluation uses single-turn tasks with verifiable
+answers, so that rewards can be computed cheaply and without a learned judge.
 
 \section{Organisation of this Report}
 \label{sec:Organisation}
 
 Chapter~\ref{chap:Preliminaries} defines the terminology used throughout, surveys the
 relevant literature, and states the contributions of this work.
-Chapter~\ref{chap:Implementation} describes the testbed and the selection policies.
-Chapter~\ref{chap:Evaluation} presents the tests of the three hypotheses and the
-comparison of selectors. Chapter~\ref{chap:Challenges} discusses the difficulties
-encountered during the project. Chapter~\ref{chap:Conclusion} summarises the findings
-and identifies directions for future work.
+Chapter~\ref{chap:Implementation} describes the tasks, the student and providers, the
+training objective and the curriculum selector. Chapter~\ref{chap:Evaluation} reports
+the preliminary study with priced black-box providers and how its findings shaped the
+refined problem. Chapter~\ref{chap:Plan} sets out the evaluation of the refined
+problem, and Chapter~\ref{chap:Conclusion} summarises the findings and limitations.

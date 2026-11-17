@@ -1,0 +1,66 @@
+\chapter{Preliminaries}
+\label{ca:chap:prelim}
+
+\section{Notation and Problem Statement}
+\label{ca:sec:problem}
+
+A student policy $\pi_\theta$ can learn from $K$ providers $M_1, \dots, M_K$. Prompts
+come from $D$ domains $\mathcal{X}_1, \dots, \mathcal{X}_D$, and the student's utility
+$U(\theta)$ is its mean accuracy over held-out sets, one per domain. Training proceeds in
+rounds. In round $t$ a selector chooses an arm $a_t = (k_t, d_t)$, a provider and a
+domain, and the student is updated on a batch $S_{k_t,d_t}$ of $b$ prompts from
+$\mathcal{X}_{d_t}$ under the supervision of $M_{k_t}$. The sequence of arms is the
+curriculum. The selector sees only the student's accuracy on a selection set that is
+disjoint from the test sets, and it should make $U(\theta_t)$ rise as fast and as far as
+possible. The quantity it must estimate is the marginal value of an arm at the current
+state,
+\[
+  g(k, d; \theta) =
+  \mathbb{E}\big[\, U\big(\operatorname{Update}(\theta, S_{k,d})\big) - U(\theta) \,\big].
+\]
+If $g$ did not depend on $\theta$, the problem would be an ordinary bandit. Because every
+update changes $\theta$, the values drift as a result of the selector's own choices.
+
+\paragraph{The budgeted, black-box version.} All experiments in this report use the first
+version of the problem. Provider $M_k$ is a sampling oracle that returns a text response to
+a prompt at price $c_k$, a round on arm $(k, d)$ is charged $b\,c_k$, and training stops
+when a budget $B$ is spent. The selector then maximises $\mathbb{E}[U(\theta_\tau)]$
+subject to $\sum_{t \le \tau} b\,c_{k_t} \le B$, and the relevant quantity is the marginal
+value per unit of cost, $v(k, d; \theta) = g(k, d; \theta) / (b\,c_k)$.
+
+\paragraph{Hypotheses.} The problem is worth solving only if provider value varies in this
+way, so we test three hypotheses in order. H1 (non-dominance): at a fixed student state,
+the provider of highest marginal value differs across domains. H2 (state dependence):
+within a domain, the provider of highest marginal value changes during training. H3
+(adaptivity pays): an adaptive selector reaches higher test utility than the best static
+allocation at equal budget. H1 alone would justify a fixed allocation per domain, H2 makes
+adaptive selection necessary, and H3 makes it worthwhile. A negative H2 is also useful: it
+would show that an allocation fixed before training is enough.
+
+\section{Black-Box On-Policy Distillation}
+\label{ca:sec:opd}
+
+\paragraph{Agreement reward.} Each provider answered every prompt four times, and every
+response is reduced to a canonical final answer (an expression's value, a normalised maths
+answer, or a program's outputs on the test inputs). Let $n_k(z; x)$ count how many of
+provider $k$'s answers to prompt $x$ equal $z$. A student response with answer $z$ receives
+\[
+  r_k(z; x) = \frac{n_k(z; x)}{\max_{z'} n_k(z'; x)},
+\]
+or 0 if it has no valid answer. If the provider answered $\{18, 18, 18, 22\}$, the student's
+answers 18, 22 and 7 receive 1, $1/3$ and 0. No ground truth enters training.
+
+\paragraph{Update.} The student samples $G = 8$ responses to each of $b = 8$ prompts. Each
+reward is turned into a group-relative advantage by subtracting the mean of its prompt's
+eight rewards and dividing by their standard deviation, as in GRPO
+\autocite{shao_deepseekmath_grpo_2024}, and the student takes one policy-gradient step.
+A prompt whose eight answers are identical would give every response the same reward and
+no gradient, so it is skipped before the provider is consulted and is not charged.
+
+\paragraph{The ceiling.} The expected reward on a prompt is highest when the student always
+gives the provider's most common answer. A student that fully learned from provider $k$
+would therefore be right exactly where that answer is right. We call this accuracy the
+provider's ceiling $\mu_{k,d}$ and use it, rather than single-response accuracy, as the
+measure of a provider's quality as a teacher. The ceiling is a per-prompt argument, not a
+hard limit: in our pilot the student passed two providers' ceilings on Countdown by applying
+what it learned on prompts the provider got right to prompts it got wrong.

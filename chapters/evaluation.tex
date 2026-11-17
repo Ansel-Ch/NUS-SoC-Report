@@ -1,447 +1,365 @@
-\chapter{Evaluation}
+\chapter{Preliminary Study: Priced Black-Box Providers}
 \label{chap:Evaluation}
 
-% \TBD is defined in implementation.tex; redefined here only if this chapter is
-% compiled on its own.
-\providecommand{\TBD}[1][]{\textcolor{red}{[TBD\if\relax\detokenize{#1}\relax\else: #1\fi]}}
-\providecommand{\placeholderfig}[1]{%
-  \fbox{\parbox[c][4.5cm][c]{0.85\linewidth}{\centering\small\color{red} #1}}}
+This chapter reports the first version of the problem that the project studied, in which
+providers return only text and every query has a price. All three hypotheses H1 to H3
+were run once at full scale in this version, with three seeds. The chapter describes the
+setting and testbed, reports what was found and how confident each finding is, and ends
+with how the findings led to the refined problem of
+Section~\ref{sec:Problem Statement}. The study took about 110 L40 GPU-hours.
 
-This chapter reports six experiments. The first motivates the black-box assumption.
-The next three test hypotheses H1 to H3 of Section~\ref{sec:Problem Statement} in
-order, since each is worth testing only if the previous one holds. The last two
-analyse the selection rewards and the allocations that the selectors learn. For each
-hypothesis the decision rule is stated before the results. Before these, a pilot run with
-one seed, reported in Section~\ref{eval:sec:Pilot}, tested the pipeline and identified the
-revisions needed for the main runs.
+\section{The Budgeted, Black-Box Version}
+\label{pre:sec:setup}
 
-\section{Hardware}
-\label{sec:Hardware}
+Provider $M_k$ is a sampling oracle that returns a text response to
+a prompt at price $c_k$, a round on arm $(k, d)$ is charged $b\,c_k$, and training stops
+when a budget $B$ is spent. A provider's responses are text only. The selector then maximises $\mathbb{E}[U(\theta_\tau)]$
+subject to $\sum_{t \le \tau} b\,c_{k_t} \le B$, and the relevant quantity is the marginal
+value per unit of cost, $v(k, d; \theta) = g(k, d; \theta) / (b\,c_k)$.
 
-The main experiments run on a shared server with six NVIDIA L40 GPUs of 48\,GB each,
-two AMD EPYC 7763 processors and 1\,TB of memory, without a job scheduler. Jobs wait for
-an idle GPU, use at most two GPUs at a time and one GPU per run. Providers and the
-student's rollouts are served with vLLM, and training uses PyTorch with the PEFT library
-(Section~\ref{imp:sec:config}). Screening the candidate providers took 3.0 GPU-hours and
-building the response cache 8.1 GPU-hours, and the pilot run of
-Section~\ref{eval:sec:Pilot} 14.4 GPU-hours. The motivating experiment of
-Section~\ref{eval:sec:Motivating} runs on the School of Computing's Slurm cluster, on
-NVIDIA A100 and H100 GPUs. \TBD[total GPU-hours once the experiments are complete]
+In this version H1 and H2 concern the marginal value per unit of cost, and H3 compares
+an adaptive selector with the best static allocation at equal budget.
 
-\section{Experimental Setup}
-\label{sec:Experimental Setup}
-
-\paragraph{Metrics.} The primary metric is test utility $U(\theta_\tau)$, the
-weighted mean of per-domain test accuracy, with equal domain weights unless stated.
-Every result is reported together with the budget spent and the number of gradient
-steps taken, since at equal budget cheaper providers buy more steps
-(Section~\ref{imp:sec:config}). Where students of different capacity are compared, the
-teacher-gap recovery
+\paragraph{Agreement reward.} Each provider answered every prompt four times, and every
+response is reduced to a canonical final answer (an expression's value, a normalised maths
+answer, or a program's outputs on the test inputs). Let $n_k(z; x)$ count how many of
+provider $k$'s answers to prompt $x$ equal $z$. A student response with answer $z$ receives
 \[
-  R = \frac{\mathrm{Acc}_{\mathrm{method}} - \mathrm{Acc}_{\mathrm{base}}}
-           {\mathrm{Acc}_{\mathrm{teacher}} - \mathrm{Acc}_{\mathrm{base}}}
+  r_k(z; x) = \frac{n_k(z; x)}{\max_{z'} n_k(z'; x)},
 \]
-normalises away the student's starting point.
+or 0 if it has no valid answer. If the provider answered $\{18, 18, 18, 22\}$, the student's
+answers 18, 22 and 7 receive 1, $1/3$ and 0. No ground truth enters training.
 
-\paragraph{Budgets.} Each selector is run at three budgets $B \in \{\TBD, \TBD, \TBD\}$,
-chosen so that the smallest allows roughly \TBD\ rounds with the strongest provider
-alone.
+\paragraph{Update.} The student samples $G = 8$ responses to each of $b = 8$ prompts. Each
+reward is turned into a group-relative advantage by subtracting the mean of its prompt's
+eight rewards and dividing by their standard deviation, as in GRPO
+\autocite{shao_deepseekmath_grpo_2024}, and the student takes one policy-gradient step.
+A prompt whose eight answers are identical would give every response the same reward and
+no gradient, so it is skipped before the provider is consulted and is not charged.
 
-\paragraph{Seeds and uncertainty.} Every configuration is run with three seeds (0, 1
-and 2). Intervals are 95\% bootstrap intervals over seeds and test items. Selectors
-are compared by paired differences on the same seeds and test items.
+\paragraph{The ceiling.} The expected reward on a prompt is highest when the student always
+gives the provider's most common answer. A student that fully learned from provider $k$
+would therefore be right exactly where that answer is right. We call this accuracy the
+provider's ceiling $\mu_{k,d}$ and use it, rather than single-response accuracy, as the
+measure of a provider's quality as a teacher. The ceiling is a per-prompt argument, not a
+hard limit: in our pilot the student passed two providers' ceilings on Countdown by applying
+what it learned on prompts the provider got right to prompts it got wrong.
 
-\section{Pilot Run}
-\label{eval:sec:Pilot}
+\section{Testbed}
+\label{pre:sec:testbedsetup}
 
-Before the main experiments, every condition was run once, with seed 0 and the single
-budget $B = 2{,}400$, to test the pipeline end to end and to check the design against
-real training. The pilot comprised the five single-provider runs, uniform allocation,
-the headroom selector, discounted Thompson sampling, the provider-free correctness
-control and the SFT baseline, together with an evaluation of the untrained student. All
-eleven jobs completed, using 14.4 GPU-hours. Each final student was evaluated greedily
-on the 500-problem test set of every domain.
+\paragraph{Domains and student.} The domains, splits, checkers and student are those of
+Chapter~\ref{chap:Implementation}.
 
-With one seed, these results describe what happened rather than test the hypotheses.
-Each mean in Table~\ref{eval:tab:pilot} is an accuracy over 1,500 test problems, with a
-standard error of about 0.013, so differences in mean below about 0.03 are not
-distinguishable. The decision rules of Sections~\ref{eval:sec:H1} to~\ref{eval:sec:H3}
-are not applied here.
+\paragraph{Providers.} Nine open models were screened on 200 prompts per domain and five
+were kept (Table~\ref{pre:tab:pool}). They run locally but are reached only through a text
+interface, so black-box access is enforced rather than assumed. The pool has a strong and
+expensive model, a mid-priced generalist, a code specialist, a cheap model the student can
+catch up with, and a cheap model from a second family, which separates any effect of
+sharing the student's family from an effect of price. A sixth provider is a copy of Phi-4
+at the same price whose answers are corrupted on 30\% of prompts.
 
 \begin{table}[htbp]
 \centering
 \small
-\begin{tabular}{@{}lrrcccc@{}}
+\begin{tabular}{@{}llrccc@{}}
 \toprule
- & & & \multicolumn{4}{c}{\textbf{Test accuracy}} \\
-\cmidrule(l){4-7}
-\textbf{Condition} & \textbf{Rounds} & \textbf{Spent} & \textbf{Countdown} & \textbf{MATH} &
-  \textbf{Code} & \textbf{Mean} \\
+ & & & \multicolumn{3}{c}{\textbf{Ceiling $\mu_{k,d}$}} \\
+\cmidrule(l){4-6}
+\textbf{Provider} & \textbf{Size} & \textbf{Price $c_k$} & \textbf{Countdown} &
+  \textbf{MATH} & \textbf{Code} \\
 \midrule
-Untrained student            & --  & --    & 0.218 & 0.434 & 0.336 & 0.329 \\
-\midrule
-Qwen2.5-3B only              & 400 & 1,380 & 0.682 & 0.426 & 0.368 & 0.492 \\
-Phi-4-mini only              & 400 & 2,057 & 0.714 & 0.440 & 0.350 & 0.501 \\
-Qwen2.5-7B only              & 353 & 2,397 & 0.694 & 0.426 & 0.352 & 0.491 \\
-Qwen2.5-Coder-7B only        & 394 & 2,392 & 0.304 & 0.456 & 0.350 & 0.370 \\
-Phi-4 only                   & 109 & 2,377 & 0.508 & 0.424 & 0.336 & 0.423 \\
-\midrule
-Uniform                      & 217 & 2,397 & 0.604 & 0.434 & 0.338 & 0.459 \\
-Headroom per cost            & 400 & 1,798 & 0.584 & 0.476 & 0.338 & 0.466 \\
-Discounted Thompson sampling & 185 & 2,399 & 0.504 & 0.428 & 0.358 & 0.430 \\
-\midrule
-Correctness reward, no provider & 200 & -- & 0.560 & 0.440 & 0.376 & 0.459 \\
-SFT on provider responses    & --  & 2,384 & 0.378 & 0.432 & 0.328 & 0.379 \\
+Phi-4 \autocite{abdin_phi4_2024}                 & 14.7B & 2.92 & 0.874 & 0.804 & 0.686 \\
+Qwen2.5-7B \autocite{qwen_qwen25_2024}           & 7.6B  & 1.00 & 0.810 & 0.750 & 0.580 \\
+Qwen2.5-Coder-7B \autocite{hui_qwen25coder_2024} & 7.6B  & 0.98 & 0.620 & 0.678 & 0.612 \\
+Qwen2.5-3B \autocite{qwen_qwen25_2024}           & 3.1B  & 0.50 & 0.538 & 0.690 & 0.462 \\
+Phi-4-mini \autocite{microsoft_phi4mini_2025}    & 3.8B  & 0.84 & 0.616 & 0.618 & 0.558 \\
+Phi-4, degraded                                  & 14.7B & 2.92 & 0.614 & 0.532 & 0.492 \\
 \bottomrule
 \end{tabular}
-\caption[Pilot results]{Pilot results with one seed. Rounds are GRPO steps; runs that
-reached the cap of 400 rounds stopped before spending the whole budget. Spent is in
-price units; the pre-query filter leaves skipped prompts uncharged.}
-\label{eval:tab:pilot}
+\caption{The strongest provider is also the most expensive. Price is GPU time per response
+relative to Qwen2.5-7B; the ceiling is the accuracy of the provider's most common answer
+over its four cached responses on the selection set.}
+\label{pre:tab:pool}
 \end{table}
 
-\paragraph{Learning happened almost only on Countdown.} Every on-policy run raised
-Countdown accuracy, from 0.218 to as much as 0.714. On MATH and code, no condition moved
-test accuracy by more than 0.042 from the untrained student, which is within about 1.3
-standard errors. The training logs show why. During training the student's sampled
-accuracy on pool prompts did rise, from about 0.37 to 0.43--0.48 on MATH and from about
-0.23 to 0.32--0.36 on code in the four single-provider runs that spent more than 100
-rounds on each domain, but only to roughly the level of its existing greedy accuracy
-(0.47 on MATH and 0.40 on code on the selection set). The
-updates made the student's sampling more consistent with what it already answered
-greedily, rather than teaching it to solve new problems. On Countdown, by contrast,
-sampled accuracy rose from about 0.1 to 0.6--0.7 under Qwen2.5-3B, Phi-4-mini and
-Qwen2.5-7B, and greedy accuracy followed. At this
-scale of training, the selection signal on MATH and code is therefore close to zero for
-every arm, and H1 and H2 can only be observed on Countdown. A follow-up check trained
-on each domain alone for 60 rounds with Qwen2.5-7B, at the pilot's learning rate and at
-five times that rate. The higher rate did not help on MATH ($-0.014$ against $+0.022$ on
-the selection set) or code ($+0.000$ against $+0.010$), cut the gain on Countdown from
-$+0.280$ to $+0.098$, and shortened the student's Countdown responses from 361 to 169
-tokens. The learning rate therefore stays at $2 \times 10^{-5}$, and MATH and code are kept
-as domains in which the student learns little at this scale; a good selector should learn
-not to spend there.
+\paragraph{Prices and cache.} A provider's price is the GPU time it needs to produce one
+response, relative to Qwen2.5-7B, measured during screening and fixed before training.
+Long-winded providers therefore cost more, as under per-token pricing. Each provider
+answered every pool and selection prompt four times, once; runs read these cached answers,
+which makes them reproducible and the measurements of Section~\ref{pre:sec:branching}
+affordable.
 
-\paragraph{Providers differ in how fast they teach Countdown.}
-Figure~\ref{eval:fig:pilot-countdown} follows Countdown accuracy in the single-provider
-runs. Per round, Phi-4-mini taught fastest, reaching 0.71 after 100 Countdown rounds,
-against 0.60 for Qwen2.5-7B and 0.51 for Qwen2.5-3B. Per unit of budget the ordering
-changed as spending grew: Qwen2.5-3B led up to about 200 price units, and Phi-4-mini was
-ahead by 400 (0.62 against 0.53). This is the shape that H1 and H2 describe, but here it
-is confounded by the rotation between domains and rests on one seed; the branch
-measurements of Section~\ref{eval:sec:H2} are the test. Phi-4 could afford only about 40
-Countdown rounds within the budget. The provider-free control, rewarded with ground-truth
-correctness, reached 0.54 on the selection subsample after 60 Countdown rounds, against 0.55 for Phi-4-mini and 0.46
-for Qwen2.5-3B, so on this task agreement with a provider was about as useful as the
-true labels.
+\paragraph{Training and evaluation.} Every run has a budget of $B = 2{,}400$ price units
+and a cap of 400 rounds. The selector chooses an arm once per block of 10 rounds, after
+which the student is evaluated greedily on 256 selection prompts per domain. Final students
+are evaluated on all 1,500 test problems. Every condition is run with three seeds, and
+intervals are 95\% bootstrap intervals over seeds and test items.
+
+\section{Selectors}
+\label{pre:sec:selectors}
+
+\paragraph{Headroom with learned efficiency (ours).} The selector scores each arm by how
+far the student is below the provider's ceiling, scaled by a learned estimate of how much
+accuracy that headroom buys, and divided by price:
+\[
+  \hat{v}(k, d) = \max\big(\hat{g}_{k,d},\, 0\big) \cdot
+                  \frac{\max\big(\mu_{k,d} - \alpha_d,\ 0.05\big)}{c_k},
+\]
+where $\alpha_d$ is the student's current selection accuracy on domain $d$. The efficiency
+$\hat{g}_{k,d}$ is the realised accuracy gain per round per unit of headroom, pooled per
+domain, shrunk towards the domain's estimate and discounted by 0.95 per block, so that a
+domain where no provider produces progress is learned to be unproductive for all of them at
+once. With probability 0.1 the selector plays a random arm instead, so every arm keeps
+being observed.
+
+\paragraph{Cost-aware Thompson sampling.} A model-free comparison that keeps a discounted
+Gaussian posterior over each arm's gain per round and plays the arm with the largest
+sampled gain divided by price \autocite{xia_budgeted_ts_2015,raj_dts_2017}.
+
+\paragraph{Reference policies.} Uniform allocation over all 18 arms; each real provider
+alone, with domains in rotation; a control trained on ground-truth correctness with no
+provider and no cost for 200 rounds, which shows what providers add beyond the labels; and
+supervised fine-tuning (SFT) on provider responses bought with the same budget, which shows
+what learning on-policy adds.
+
+\section{Measuring Marginal Value}
+\label{pre:sec:branching}
+
+We measure $v(k, d; \theta)$ directly by branching. The uniform run of each seed saves
+checkpoints at 25, 50 and 75\% of its budget, and the untrained student serves as the 0\%
+checkpoint. From each checkpoint, a branch trains on a single arm for 20 rounds and is then
+evaluated on the full selection set; marginal value is the change in mean selection
+accuracy divided by the budget the branch spent. With 6 providers, 3 domains, 4 checkpoints
+and 3 seeds this gives 216 branches. Branches from the same checkpoint and seed share the
+adapter, the prompt order and the sampling seeds, so comparisons between providers are
+paired.
+
+\section{Design Decisions}
+\label{pre:sec:decisions}
+
+Table~\ref{pre:tab:decisions} lists the choices that most shape the results, the
+alternatives we considered, and the evidence behind each choice.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.7cm}
+                >{\raggedright\arraybackslash}p{3.9cm}
+                >{\raggedright\arraybackslash}p{8.3cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Alternatives} & \textbf{Reason for the choice} \\
+\midrule
+Black-box agreement reward & Logit-based on-policy distillation across tokenizers &
+  Cross-tokenizer distillation recovered 0.14 of the teacher gap against 0.66 with a shared
+  tokenizer, and its hybrid variant collapsed (Takeaway~\ref{pre:tk:blackbox}). \\
+Normalised vote share & Most-common-answer indicator; raw vote share; rubric with a verifier &
+  Carried as much learning signal as ground truth on MATH and code in screening, kept signal
+  on Countdown where providers often give invalid answers, and needs no extra model. \\
+Ceiling as provider quality & Single-response accuracy; agreement with other providers &
+  It is where the reward points the student. Agreement with peers was label-free but
+  favoured the Qwen family, which made up most of the pool. \\
+Countdown (3 numbers), MATH 3--5, KodCode & GSM8K; MBPP; 4-number Countdown &
+  GSM8K was saturated (all large providers scored 94--97\%), MBPP had too few problems, and
+  the student solved 0.8\% of 4-number puzzles, leaving almost no gradient. \\
+Price = GPU time per response & Parameter count; hosted API prices &
+  Measured on our hardware and fixed before training, and captures verbosity: one candidate
+  repeated itself until the length limit. \\
+Corrupt whole prompts in the degraded provider & Corrupt each response independently &
+  Independent corruption at 30\% lowered the ceiling by only 8\%, because the majority
+  usually survives; per-prompt corruption lowers it by 30\%. \\
+\bottomrule
+\end{tabular}
+\caption{Main design decisions and their evidence.}
+\label{pre:tab:decisions}
+\end{table}
+
+\section{Logits Help Only with a Shared Tokenizer}
+\label{pre:sec:motivating}
+
+The black-box assumption gives up the teacher's token probabilities. To see what those are
+worth, we ran on-policy distillation from Qwen3-4B-Instruct on Countdown with three
+students, each first fine-tuned to the same starting accuracy of about 0.38
+(Table~\ref{pre:tab:motivating}). Recovery $R$ is the fraction of the gap between that
+starting point and the teacher (0.713) that distillation closed.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}llllc@{}}
+\toprule
+\textbf{Student} & \textbf{Tokenizer} & \textbf{Loss} & \textbf{Accuracy} & $R$ \\
+\midrule
+Qwen2.5-1.5B & shared    & exact logits (GKD)         & 0.379 $\to$ 0.600 & 0.66 \\
+Qwen2.5-1.5B & shared    & cross-tokenizer loss (ULD) & 0.379 $\to$ 0.487 & 0.32 \\
+OLMo-2-1B    & different & cross-tokenizer loss (ULD) & 0.381 $\to$ 0.426 & 0.14 \\
+OLMo-2-1B    & different & GOLD hybrid                & 0.381 $\to$ 0.035 & collapsed \\
+SmolLM2-1.7B & different & GOLD hybrid                & 0.375 $\to$ 0.000 & collapsed \\
+\bottomrule
+\end{tabular}
+\caption{Each step away from a shared tokenizer roughly halves what distillation recovers,
+and the hybrid cross-tokenizer loss collapses. Countdown, 200 steps, 1,000 test puzzles;
+the first OLMo-2 GOLD run was stopped at step 110.}
+\label{pre:tab:motivating}
+\end{table}
+
+The cross-tokenizer loss alone halved recovery on a shared tokenizer (paired difference
+$+0.113$, 95\% interval $[+0.091, +0.136]$), and a real mismatch halved it again. The GOLD
+hybrid loss collapsed on both cross-tokenizer students while its value kept falling: it
+forced OLMo-2 into the teacher's single-digit number tokens, which broke its arithmetic, and
+it let SmolLM2 emit newlines to the length limit.
+
+\begin{takeaway}{Logits Need a Shared Tokenizer}
+\label{pre:tk:blackbox}
+With a shared tokenizer, exact logits closed two thirds of the gap to the teacher in 200
+steps. Across model families, logit-level supervision is lossy and fragile, so a reward
+computed from the teacher's text was the safe choice for a pool of mixed families.
+\end{takeaway}
+
+\section{Selectors Need Feedback from Realised Gains}
+\label{pre:sec:pilot}
+
+We first ran every condition once (seed 0, 14.4 GPU-hours) to test the pipeline. The
+original headroom selector, which scored arms by headroom over price alone, made the switch
+it predicted before training, from Qwen2.5-3B to Qwen2.5-7B on Countdown once the student
+passed an accuracy of about 0.27. It then spent 320 of its 400 rounds on MATH, where the
+headroom never shrank because nothing was learned. The original Thompson sampling divided
+each noisy gain by its cost before learning, which shrinks the noise of expensive arms
+towards zero, and it spent 55\% of its budget on the degraded provider. A five-times-higher
+learning rate did not help MATH or code and cut the Countdown gain from $+0.280$ to
+$+0.098$. We kept the learning rate, added the learned efficiency to the headroom selector,
+and made Thompson sampling apply the price only when choosing.
+
+\begin{takeaway}{Headroom Is Not Enough}
+\label{pre:tk:feedback}
+A domain can have large headroom and no learnability, so a selector must learn from the
+progress it actually observes, and noisy gains must not be divided by cost before they are
+averaged.
+\end{takeaway}
+
+\section{Price, Not Provider Identity, Decides Value (H1, H2)}
+\label{pre:sec:h12}
+
+Figure~\ref{pre:fig:mv} shows the marginal value of every provider on every domain at the
+four checkpoints, from all 216 branches.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{pilot_countdown_learning.pdf}
-\caption[Countdown accuracy in the single-provider pilot runs]{Countdown accuracy in the
-single-provider pilot runs, against the number of Countdown rounds (left) and the budget
-spent on Countdown (right). Accuracy is measured greedily on the 128-problem selection
-subsample after each block, so single points carry a standard error of about 0.04.}
-\label{eval:fig:pilot-countdown}
+\includegraphics[width=\linewidth]{ca_marginal_value.pdf}
+\caption{On Countdown, the cheapest provider usually gives the most progress per unit of
+budget, and on MATH and code every provider gives almost none. Change in mean selection
+accuracy after 20 rounds on one arm, per 1,000 price units; points are means over three
+seeds, bars $\pm 1$ standard error, offset horizontally for legibility.}
+\label{pre:fig:mv}
 \end{figure}
 
-\paragraph{One provider made the student collapse.} Under Qwen2.5-Coder-7B, the
-student's Countdown responses shrank from about 235 tokens of reasoning to about 20
-tokens, a bare answer, within about 40 Countdown rounds, and its Countdown accuracy on
-the selection subsample stayed below 0.3. No other run showed this: in every other run
-the student's Countdown responses ended between 445 and 584 tokens long. The cause is not
-yet clear. Invalid provider answers alone do not explain it, since 64\% of
-Qwen2.5-Coder-7B's cached Countdown responses contain no valid answer, against a similar
-66\% for Phi-4-mini, which caused no collapse. A provider can therefore harm the student,
-not merely help it less. A second explanation was also tested and rejected: a bare guess
-that adds the three numbers would be rewarded if the provider often answered that way, but
-Qwen2.5-Coder-7B's most common answer is that trivial sum on only 2.9\% of prompts, no more
-often than for the other providers (2 to 8\%). The higher learning rate of the follow-up
-check also shortened the student's responses, which suggests that the collapse is a failure
-mode of strong updates rather than a property of one provider. The main runs test whether
-it recurs with other seeds.
+\paragraph{Cheap providers lead per unit of budget.} On Countdown, the cheapest provider,
+Qwen2.5-3B, has the highest mean marginal value at the 0, 25 and 75\% checkpoints, and
+Phi-4-mini at 50\%; Qwen2.5-3B is the best Countdown arm in 8 of the 12 combinations of seed
+and checkpoint. Per round, without dividing by price, the providers are much closer. For
+example, from the 25\% checkpoint all six raise mean utility by between 0.022 and 0.033 in
+20 Countdown rounds. Phi-4 teaches no faster per round, to within noise, than providers that
+cost a third as much. Its only lead is on code from the untrained student, where every
+provider lowered utility and Phi-4 lowered it least. The only differences that are
+significant in paired comparisons within a seed all involve Phi-4: at 25\%, Qwen2.5-3B beats
+Phi-4 and its degraded copy on Countdown, and Phi-4-mini beats Phi-4 on code.
 
-\paragraph{The headroom selector made the predicted switch, then stalled on MATH.}
-Figure~\ref{eval:fig:pilot-headroom} shows its run. It began with Qwen2.5-3B on Countdown,
-as Table~\ref{imp:tab:predictions} predicts. Countdown accuracy reached 0.297 after round
-40, just past the predicted switch point of 0.27, and from round 41 the selector moved to
-Qwen2.5-7B. It then turned to Qwen2.5-3B on MATH and spent 320 of its 400 rounds there.
-MATH accuracy did not rise, so the headroom on MATH never shrank and the selector rarely
-left. Countdown, the domain that was learning, received only 60 rounds. When MATH
-accuracy briefly reached 0.48 around round 120, its headroom fell far enough for
-Qwen2.5-7B on Countdown to win twice, and those two blocks raised Countdown accuracy from
-0.40 to 0.52. Its two blocks with the degraded provider (rounds 11--20 and 161--170)
-were random exploration: at Phi-4's price and with a lower ceiling, the degraded provider
-never has the highest value. The run reached the round cap having spent 1,798 of its 2,400 units.
-The assumption that progress is proportional to headroom
-(Section~\ref{imp:sec:headroom}) fails when a domain has headroom but no learnability, and
-the selector has no feedback from realised gains to correct it. The main runs use a
-revised selector that learns this feedback (Section~\ref{imp:sec:headroom-learned}).
+\begin{takeaway}{Price Decides Value}
+\label{pre:tk:price}
+Providers of very different strength teach a small student at a similar rate per gradient
+step, so value per unit of budget is decided mainly by price, and the strongest provider is
+rarely worth its price.
+\end{takeaway}
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{pilot_headroom_timeline.pdf}
-\caption[The headroom selector in the pilot]{The headroom selector in the pilot.
-Top: greedy accuracy on the selection subsample per domain. Bottom: the arm chosen in
-each block of ten rounds, coloured by provider.}
-\label{eval:fig:pilot-headroom}
-\end{figure}
+\paragraph{H1 and H2 are below our current resolution.} Our decision rules, fixed before the
+runs, require the leading provider's 95\% interval to clear its rival's; here these are
+t-intervals over the three seeds. This never happens between the cheap and mid-priced
+providers, at any checkpoint or in any domain. The leading provider does change between
+checkpoints and domains, and the rankings are unstable: Kendall's $\tau$, which measures how
+well the provider ranking at one checkpoint agrees with the ranking at the next, ranges from
+$-0.60$ to $0.73$. But changes of that size are also what noise alone would produce.
 
-\paragraph{Thompson sampling chased noise and favoured expensive arms.} It spent 1,326
-of its 2,399 units, 55\%, on the degraded provider. Two causes are visible in its log.
-First, it had only 20 blocks in which to learn about 18 arms. Second, every block's
-measured gain lay between $-0.023$ and $+0.029$, which is within the noise of comparing
-two evaluations on 128 problems per domain (about $\pm 0.035$). Dividing such noisy gains
-by cost magnifies the noise of cheap arms and shrinks that of expensive ones towards
-zero: a block of Qwen2.5-3B on MATH costing 34 units scored $-0.69$ per thousand units,
-while blocks of the degraded provider costing about 210 units scored between $-0.07$
-and $+0.14$. With
-gains this small, cost normalisation biases the selector towards expensive arms whatever
-their value. The main runs use a cost-aware version that estimates gain per round and
-divides by price only when choosing (Section~\ref{imp:sec:selectors}), and every block is
-now evaluated on 256 problems per domain instead of 128.
+\begin{takeaway}{H1 and H2 Remain Open}
+\label{pre:tk:open}
+Among the affordable providers, differences in marginal value are smaller than three seeds
+of 20-round branches can detect, so we can neither confirm nor reject that the best
+provider differs by domain or changes during training.
+\end{takeaway}
 
-\paragraph{Uniform allocation spent most of its budget on the expensive providers.}
-Because it gives every arm the same number of blocks, 1,582 of its 2,397 units (66\%) went
-to Phi-4 and its degraded copy, which explains why it trailed the cheap single-provider
-runs despite visiting every arm.
+\section{Adaptive Selection Matches the Best Provider (H3)}
+\label{pre:sec:h3}
 
-\paragraph{Off-policy fine-tuning helped least.} SFT on provider responses, bought with
-the same budget, reached 0.378 on Countdown against 0.604 for the on-policy uniform
-allocation, and did not improve MATH or code.
+Table~\ref{pre:tab:h3} reports every condition on the test set.
 
-\paragraph{The pre-query filter saved 15.7\% of queries.} Across all runs, 15.7\% of the
-prompts drawn for training were skipped before the provider was consulted, from 6.7\% in
-the Phi-4 run to 23.5\% in the Phi-4-mini run. It was highest in the runs where the
-student's answers had converged most, on Countdown under Phi-4-mini and in the collapsed
-Qwen2.5-Coder-7B run.
+\input{chapters/h3_table.tex}
 
-\paragraph{What the pilot implies for the hypotheses.} With one seed, no adaptive
-selector beat the best single provider: the headroom selector reached a mean of 0.466 and
-Thompson sampling 0.430, against 0.501 for Phi-4-mini alone. This is not a test of H3,
-because both selectors showed design flaws that are fixable before the main runs. The
-pilot does show that the best provider for a domain can differ from the most capable
-one, and that the most cost-effective provider can change as the student learns, which is
-the premise of H1 and H2.
+\paragraph{Our selector matches but does not beat the best single provider.} The best
+single provider is Qwen2.5-7B, with test utility 0.494. Our selector reaches 0.500, the
+highest of any condition and the most consistent across seeds (0.503, 0.498 and 0.500), but
+its paired advantage of $+0.007$ has a 95\% interval from $-0.011$ to $+0.026$. It learned
+what the pilot version could not: it spent 38 to 58\% of its budget on Countdown, where
+learning happens, and only 6 to 9\% on Phi-4. It did not reliably avoid the degraded
+provider, which received 16 to 17\% of the budget in two seeds and none in the third. These
+comparisons take the best static allocation over the single-provider runs only; the planned
+allocation that gives each domain its own best provider is not yet built.
 
-\paragraph{Revisions for the main runs.} The main runs keep the learning rate, replace
-both selectors with the revised versions of Sections~\ref{imp:sec:headroom-learned}
-and~\ref{imp:sec:selectors}, and evaluate each block on 256 problems per domain. In a
-simulator calibrated to the pilot, the revised selectors no longer showed the pilot's
-failures (Section~\ref{imp:sec:verification}). The single-provider runs, uniform
-allocation, provider-free control and SFT baseline are unchanged and are rerun with three
-seeds.
+\paragraph{Other conditions.} Cost-aware Thompson sampling reached 0.465 and 0.502 in two
+seeds but collapsed in the third (0.322), where the student's Countdown answers shrank from
+445 tokens to 38. Uniform allocation spent 59 to 66\% of its budget on Phi-4 and its
+degraded copy and did no better than the cheapest single provider (0.445 against 0.442).
+Phi-4 alone was the worst single provider, because its price bought only 110 rounds.
 
-\section{Motivating Experiment: The Cost of Cross-Tokenizer Supervision}
-\label{eval:sec:Motivating}
+\begin{takeaway}{Adaptivity Finds the Best Provider but Does Not Yet Beat It}
+\label{pre:tk:h3}
+Without being told which provider is best, our selector matches the best single provider
+and spends little on Phi-4, but its advantage is not yet distinguishable from zero.
+\end{takeaway}
 
-\paragraph{Question.} How much of the teacher--student gap does white-box on-policy
-distillation recover when teacher and student do not share a tokenizer, and why?
-The answer determines whether the black-box assumption gives anything up.
+\section{Learning Is Confined to Countdown and Is Fragile}
+\label{pre:sec:countdown}
 
-\paragraph{Setup.} The teacher is Qwen3-4B-Instruct. Students are Qwen2.5-1.5B-Instruct,
-which shares the teacher's tokenizer, OLMo-2-1B, with vocabulary overlap 0.65, and
-SmolLM2-1.7B, with overlap 0.24. All runs start from each student's SFT checkpoint
-on verified teacher completions and train on Countdown with the same trainer and
-step count; only the loss and the student change.
+No condition moved MATH or code test accuracy by more than 0.024 from the untrained student;
+every gain in Table~\ref{pre:tab:h3} is on Countdown. On MATH and code, training made the
+student's sampled answers more consistent with what it already answered greedily, rather
+than teaching it new problems. SFT on provider responses was the weakest condition (0.372),
+below every on-policy run, and the correctness control reached 0.462 with 200 rounds.
+Learning on Countdown is also unstable: in some runs the student's answers collapse from
+hundreds of tokens of reasoning to a bare answer. We first saw this under Qwen2.5-Coder-7B
+in the pilot, and it recurred with other providers and in the collapsed Thompson sampling
+run.
 
-\begin{table}[H]
-\centering
-\begin{tabular}{|c|l|l|c|c|}
-\hline
-\textbf{ID} & \textbf{Student} & \textbf{Method} & \textbf{Test acc.} & $R$ \\
-\hline
-B1 & each & SFT on teacher completions & \TBD & 0 \\
-T  & teacher & -- & \TBD & 1 \\
-G1 & Qwen2.5-1.5B & GKD, exact logits & \TBD & \TBD \\
-G2 & Qwen2.5-1.5B & ULD only, same tokenizer & \TBD & \TBD \\
-X1 & OLMo-2-1B & GOLD hybrid & \TBD & \TBD \\
-X2 & SmolLM2-1.7B & GOLD hybrid & \TBD & \TBD \\
-\hline
-\end{tabular}
-\caption[Same-tokenizer and cross-tokenizer distillation on Countdown]{Countdown test
-accuracy and teacher-gap recovery for same-tokenizer and cross-tokenizer on-policy
-distillation.}
-\label{eval:tab:motivating}
-\end{table}
+\begin{takeaway}{One Domain Carries the Signal}
+\label{pre:tk:countdown}
+At this scale the student learns almost only on Countdown, on-policy learning clearly beats
+imitation, and the collapse of response length is a property of the update rather than of
+any one provider.
+\end{takeaway}
 
-\paragraph{Result.} \TBD[report $R$ for G1 versus X1 and X2, the G1--G2 gap as the cost
-of the loss approximation alone, and the diagnostics that support each failure mode]
+\section{From These Findings to the Refined Problem}
+\label{pre:sec:refined}
 
-\section{Experiment 1: Non-Dominance (H1)}
-\label{eval:sec:H1}
+The findings, and feedback on the project, change the problem in four ways.
 
-\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
-  innerbottommargin=6pt]
-\textbf{Decision rule.} H1 is supported if, at $\theta^{(0)}$, there are two domains
-$d \ne d'$ whose arms of highest estimated marginal value belong to different
-providers, and in each the leading arm's 95\% interval lies above that of the other
-provider's arm.
-\end{mdframed}
+\paragraph{The budget made the problem about price.} Under a budget, what
+providers cost decided the comparison between them, not what they teach
+(Takeaway~\ref{pre:tk:price}). We remove the budget and compare curricula by their learning
+curves: test accuracy against the number of prompts the student has trained on.
 
-\paragraph{Protocol.} Marginal values $\hat v(k, d; \theta^{(0)})$ are estimated by
-branching from the initial student, as in Section~\ref{imp:sec:Marginal}.
+\paragraph{An answer-only reward makes the provider a noisy label.} The agreement reward
+uses only a provider's final answers. A control trained on ground truth with no provider
+reached 0.462 in 200 rounds, close to the single-provider runs, so on tasks with checkable
+answers the provider added little that the labels did not. A teacher must contribute
+something a label cannot, and its token probabilities are the natural candidate.
 
-\begin{table}[H]
-\centering
-\begin{tabular}{|l|c|c|c|}
-\hline
-\textbf{Provider} & \textbf{Countdown} & \textbf{MATH} & \textbf{Code} \\
-\hline
-Phi-4                   & \TBD & \TBD & \TBD \\
-Qwen2.5-7B              & \TBD & \TBD & \TBD \\
-Qwen2.5-Coder-7B        & \TBD & \TBD & \TBD \\
-Qwen2.5-3B              & \TBD & \TBD & \TBD \\
-Phi-4-mini              & \TBD & \TBD & \TBD \\
-Phi-4, degraded         & \TBD & \TBD & \TBD \\
-\hline
-\end{tabular}
-\caption{Estimated marginal value $\hat v(k, d; \theta^{(0)})$, in utility points per
-unit cost, with 95\% intervals. Bold marks the best provider in each domain.}
-\label{eval:tab:h1}
-\end{table}
+\paragraph{The update needs a denser signal.} One scalar per response left MATH and code
+unmoved and let Countdown collapse (Takeaway~\ref{pre:tk:countdown}). With a shared
+tokenizer, token probabilities give supervision at every position and worked well in our
+motivating experiment (Takeaway~\ref{pre:tk:blackbox}). We therefore restrict the pool to
+providers of the student's family, Qwen2.5-3B, Qwen2.5-7B and Qwen2.5-Coder-7B, and make
+them white-box.
 
-A second table reports the same quantities without dividing by cost, to separate a
-provider that is most useful from one that is most useful per unit of budget.
-
-\paragraph{Result.} \TBD
-
-\section{Experiment 2: State Dependence (H2)}
-\label{eval:sec:H2}
-
-\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
-  innerbottommargin=6pt]
-\textbf{Decision rule.} H2 is supported in domain $d$ if the provider of highest
-estimated marginal value at some checkpoint $\theta^{(c)}$ differs from that at
-$\theta^{(0)}$, with non-overlapping 95\% intervals between the two providers at
-$\theta^{(c)}$. H2 is supported overall if it holds in at least one domain under
-the on-policy update.
-\end{mdframed}
-
-\paragraph{Protocol.} The branching of Section~\ref{imp:sec:Marginal} is repeated at
-each checkpoint $\theta^{(1)}, \dots, \theta^{(C)}$. Rank stability is summarised by
-Kendall's $\tau$ between the provider rankings at consecutive checkpoints in each
-domain.
-
-\begin{figure}[H]
-\centering
-\placeholderfig{Placeholder: one panel per domain; $x$-axis checkpoint (budget
-spent); $y$-axis $\hat v(k, d; \theta^{(c)})$ with intervals; one line per provider.
-A crossing of lines is a change of the dominant provider.}
-\caption{Marginal value of each provider across training, per domain.}
-\label{eval:fig:h2}
-\end{figure}
-
-\paragraph{Result.} \TBD
-
-\paragraph{If H2 fails.} A negative result shows that a single allocation fixed
-before training suffices on these tasks. Experiment~3 is then reported only to
-confirm that adaptive selectors do no better than the best static allocation.
-
-\section{Experiment 3: Does Adaptivity Pay? (H3)}
-\label{eval:sec:H3}
-
-\begin{mdframed}[backgroundcolor=bg, linewidth=0pt, innertopmargin=6pt,
-  innerbottommargin=6pt]
-\textbf{Decision rule.} H3 is supported if, at some budget, the best deployable
-adaptive selector exceeds the best static allocation in hindsight, with the 95\%
-interval of the paired difference above zero.
-\end{mdframed}
-
-\begin{table}[H]
-\centering
-\begin{tabular}{|l|c|c|c|}
-\hline
-\textbf{Selector} & $B_{\mathrm{low}}$ & $B_{\mathrm{mid}}$ & $B_{\mathrm{high}}$ \\
-\hline
-Uniform                    & \TBD & \TBD & \TBD \\
-Strongest-only             & \TBD & \TBD & \TBD \\
-Cheapest-only              & \TBD & \TBD & \TBD \\
-Best static in hindsight   & \TBD & \TBD & \TBD \\
-\hline
-Headroom, learned efficiency (proposed) & \TBD & \TBD & \TBD \\
-Cost-aware Thompson sampling & \TBD & \TBD & \TBD \\
-Cost-aware EXP3            & \TBD & \TBD & \TBD \\
-Sliding-window UCB         & \TBD & \TBD & \TBD \\
-Contextual (LinUCB)        & \TBD & \TBD & \TBD \\
-\hline
-Greedy oracle              & \TBD & \TBD & \TBD \\
-\hline
-\end{tabular}
-\caption{Test utility at each budget under the on-policy update, mean and 95\%
-interval over seeds. A second table reports the same under the SFT update.}
-\label{eval:tab:h3}
-\end{table}
-
-\begin{figure}[H]
-\centering
-\placeholderfig{Placeholder: test utility (y) against budget spent (x), one line per
-selector, shaded intervals.}
-\caption{Utility as a function of budget spent.}
-\label{eval:fig:h3}
-\end{figure}
-
-\paragraph{Result.} \TBD
-
-\section{Experiment 4: Selection Rewards}
-\label{eval:sec:Rewards}
-
-\paragraph{Question.} Can the cheap proxies of Table~\ref{imp:tab:rewards} stand in for
-utility gain, which requires an
-evaluation pass after every block of rounds?
-
-\paragraph{Protocol.} On the branches of Experiment~2, the rank correlation between
-each proxy and the measured utility gain is computed per domain. The best adaptive
-selector from Experiment~3 is then rerun with each proxy in place of utility gain.
-
-\begin{table}[H]
-\centering
-\begin{tabular}{|l|c|c|c|}
-\hline
-\textbf{Selection reward} & \textbf{Spearman $\rho$ with utility gain}
-  & \textbf{Final utility} & \textbf{Extra compute} \\
-\hline
-Utility gain   & 1 & \TBD & \TBD \\
-Loss decrease  & \TBD & \TBD & \TBD \\
-Learnability   & \TBD & \TBD & \TBD \\
-Signal density & \TBD & \TBD & \TBD \\
-\hline
-\end{tabular}
-\caption{Agreement of each selection reward with utility gain, and the final utility
-a selector reaches when driven by it.}
-\label{eval:tab:rewards}
-\end{table}
-
-\paragraph{Result.} \TBD
-
-\section{Experiment 5: Allocation Analysis and Robustness}
-\label{eval:sec:Allocation}
-
-\paragraph{Question.} How does each selector divide its budget among the providers?
-Does its spending track each provider's contribution, and does it learn to avoid the
-degraded provider?
-
-\paragraph{Protocol.} For each selector, the share of budget spent on each provider is
-compared with a post hoc valuation of that provider's contribution to final utility
-\autocite{sim_cml_2020}, computed by \TBD[leave-one-provider-out retraining, or a
-sampled Shapley estimate over provider subsets]. The fraction of budget spent on the
-degraded provider is tracked over time, and the degraded provider's corruption rate
-$p$ is varied over \TBD.
-
-\begin{figure}[H]
-\centering
-\placeholderfig{Placeholder: left, stacked area of budget share per provider over
-rounds for the best adaptive selector; right, budget share against post hoc value,
-one point per provider, with the identity line.}
-\caption{Budget allocation over training and its relation to provider value.}
-\label{eval:fig:allocation}
-\end{figure}
-
-\paragraph{Result.} \TBD
-
-\section{Summary of Findings}
-\label{eval:sec:Summary}
-
-\TBD[one paragraph per hypothesis: supported or not, by how much, and under which
-update rule]
-
+\paragraph{The problem is a curriculum, not a federation.} No party here holds private
+data and nothing is aggregated. What the selector does, choosing the next arm from the
+student's progress, is automated curriculum learning with the teacher as a second axis,
+and we now position the work there (Section~\ref{sec:lr-curriculum}).

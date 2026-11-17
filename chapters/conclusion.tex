@@ -4,6 +4,38 @@
 \section{Summary}
 \label{sec:Summary}
 
+This thesis introduced provider-selective distillation, a curriculum over providers and
+domains in which a small student chooses whom to learn from, about what, and when. A
+preliminary study of its first version, with priced black-box providers, found that
+token-level supervision helps only when the tokenizer is shared, that price rather than
+provider strength decides value under a budget, and that a selector which learns where
+progress happens matches the best single provider without being told which one it is.
+Learning was confined to Countdown and was unstable. These findings led to the refined
+problem: no budget, white-box providers of the student's family, and learning curves as
+the measure. For it, the thesis proposes a training objective that combines a
+ground-truth reward with the selected provider's token probabilities, and a selector
+that scores each arm by its learned gain per round. The evaluation of
+Chapter~\ref{chap:Plan} will test whether the objective is stable and makes progress on
+every domain, whether an adaptive curriculum is faster than a fixed one, and whether a
+student trained on several providers passes its teachers.
+
+\section{Limitations}
+\label{sec:Limitations}
+
+Every result in this report comes from the budgeted, black-box version of the problem;
+the refined problem has not yet been run. In that study the providers answer from a
+fixed cache of four responses per prompt, prices are a compute-based proxy rather than
+real API prices, and the student learns almost only on Countdown, so most of the
+evidence comes from one domain. Three seeds give wide intervals. The student's size was
+not varied, and tasks are single-turn with checkable answers. The limitations of the
+design for the refined problem are listed in Section~\ref{imp:sec:limitations}.
+
 \section{Future Work}
 \label{sec:Future Work}
 
+Beyond the planned evaluation, three directions follow from this work. The first is to
+bring back providers of other model families through a text-only signal, alongside the
+white-box ones, so that the curriculum also chooses the form of supervision. The second
+is a selector that needs no labelled selection set, using a signal available during
+training such as the size of the advantages. The third is to extend the tasks from
+single-turn problems with checkable answers to multi-turn agentic tasks.

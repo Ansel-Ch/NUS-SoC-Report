@@ -1,7 +1,7 @@
 \chapter{Plan for the Next Semester}
 \label{ca:chap:plan}
 
-\section{Work completed this semester}
+\section{Work Completed This Semester}
 
 Table~\ref{ca:tab:done} summarises the work so far. Every run is launched from a job queue
 that records its configuration, log and result, and every design decision and its evidence
@@ -26,31 +26,33 @@ to 4 Oct       & Motivating cross-tokenizer experiment (SoC cluster) & -- \\
 \label{ca:tab:done}
 \end{table}
 
-\section{Next steps}
+\section{Next Steps for the Refined Problem}
 \label{ca:sec:next}
 
 \begin{enumerate}[itemsep=3pt,topsep=3pt]
-  \item \textbf{Settle H1 and H2.} Re-evaluate the 216 branch adapters, saving per-item
-    results, so that providers can be compared on the same items within each seed. Then
-    run longer branches (40 to 60 rounds) and more seeds on Countdown, sized by a power
-    calculation from the current variances, for the providers whose values are close.
-  \item \textbf{Complete H3.} Run the two further budgets, so that the comparison holds at
-    more than one operating point. Add the planned selectors from the literature
-    (cost-aware EXP3, sliding-window UCB and LinUCB), a static allocation that gives each
-    domain its best provider, and an oracle approximation from the branch measurements.
-  \item \textbf{Understand the training instability.} Diagnose the response-length
-    collapse on Countdown, for example by tracking entropy and testing a KL penalty or a
-    length floor, since one collapsed run decides the ranking of a selector.
-  \item \textbf{Widen where learning happens.} Test whether a longer budget or a larger
-    student produces learning on MATH and code, so that H1 can be tested across domains
-    rather than mostly within Countdown.
-  \item \textbf{Selection rewards and allocation.} Compare cheap proxies (loss decrease,
-    learnability, signal density) with utility gain as the selector's feedback, and compare
-    each provider's share of the budget with a post hoc valuation of its contribution.
-  \item \textbf{External check against FedTOPS.} Evaluate the final students on the six
-    mathematics benchmarks used by FedTOPS \autocite{chen_fedtops_2026}, as an
-    out-of-distribution check that places the results next to the work that inspired the
-    project.
+  \item \textbf{Budget-free pilot.} Rerun uniform allocation and a simplified selector
+    without a budget, on the three Qwen providers. The selector scores an arm by its
+    learned accuracy gain per round alone: without a budget there is no price to divide
+    by, and the headroom factor is dropped because it was a poor predictor of progress
+    (Takeaway~\ref{ca:tk:feedback}). Each round uses 100 prompts instead of 8, so that one
+    block's gain is larger than the evaluation noise. This pilot is queued.
+  \item \textbf{A white-box training objective.} Combine a ground-truth reward, which lets
+    the student pass its teacher, with a divergence to the selected provider's token
+    probabilities on the student's own responses, which gives a dense and lower-variance
+    signal. Test whether it removes the response-length collapse.
+  \item \textbf{Progress on MATH and code.} Use the new objective, more prompts per round
+    and, if needed, a larger student to obtain learning outside Countdown, so that the
+    curriculum has more than one domain to choose between.
+  \item \textbf{Curricula over providers and domains.} Compare the learned selector with
+    uniform allocation, each provider alone, a fixed weak-to-strong order of providers,
+    and bandit curricula from the literature
+    \autocite{matiisen_tscl_2017,chen_sec_2025}, by learning curves over three seeds.
+    Revisit H1 and H2 in this setting with longer branches and per-item results.
+  \item \textbf{Passing the teachers.} Test whether a student trained on several
+    providers ends above the best single provider and above each provider's own accuracy,
+    and explain when it does.
+  \item \textbf{External check.} Evaluate the final students on standard mathematics
+    benchmarks outside the training pool, as an out-of-distribution check.
   \item \textbf{Write the dissertation}, keeping the main text well within the 55-page
     limit and moving implementation detail to appendices.
 \end{enumerate}
@@ -58,37 +60,39 @@ to 4 Oct       & Motivating cross-tokenizer experiment (SoC cluster) & -- \\
 \begin{table}[htbp]
 \centering
 \small
-\begin{tabular}{@{}lccccc@{}}
+\begin{tabular}{@{}lcccccc@{}}
 \toprule
-\textbf{Task} & \textbf{Dec} & \textbf{Jan} & \textbf{Feb} & \textbf{Mar} & \textbf{Apr} \\
+\textbf{Task} & \textbf{Nov} & \textbf{Dec} & \textbf{Jan} & \textbf{Feb} & \textbf{Mar} & \textbf{Apr} \\
 \midrule
-1. Settle H1 and H2           & \textbullet & \textbullet &             &             &   \\
-2. Complete H3                &             & \textbullet & \textbullet &             &   \\
-3. Training instability       & \textbullet & \textbullet &             &             &   \\
-4. Learning on MATH and code  &             & \textbullet & \textbullet &             &   \\
-5. Selection rewards, allocation &          &             & \textbullet & \textbullet &   \\
-6. FedTOPS benchmarks         &             &             & \textbullet &             &   \\
-7. Dissertation and presentation & \textbullet &          &             & \textbullet & \textbullet \\
+1. Budget-free pilot             & \textbullet &             &             &             &             &   \\
+2. White-box objective           & \textbullet & \textbullet &             &             &             &   \\
+3. Progress on MATH and code     &             & \textbullet & \textbullet &             &             &   \\
+4. Curricula, H1 and H2          &             &             & \textbullet & \textbullet &             &   \\
+5. Passing the teachers          &             &             &             & \textbullet & \textbullet &   \\
+6. External check                &             &             &             &             & \textbullet &   \\
+7. Dissertation and presentation &             & \textbullet &             &             & \textbullet & \textbullet \\
 \bottomrule
 \end{tabular}
-\caption{Schedule for the next semester. December covers the vacation.}
+\caption{Schedule for the rest of the project. December covers the vacation.}
 \label{ca:tab:schedule}
 \end{table}
 
-\section{Resources and risks}
+\section{Resources and Risks}
 \label{ca:sec:resources}
 
 \paragraph{Resources.} The project uses a shared server with six NVIDIA L40 GPUs of 48\,GB,
 no job scheduler, and at most two GPUs at a time; the motivating experiment used the School
-of Computing's Slurm cluster. About 110 L40 GPU-hours have been used. The plan above needs
-an estimated 190 more: about 100 for two further budgets, 45 for the new selectors, 35 for
-longer branches and branch re-evaluation, and 10 for the FedTOPS benchmarks. At two GPUs
-this is roughly four days of continuous running, so compute is not the binding constraint.
-Software: Python 3.12, PyTorch, vLLM, TRL and PEFT, with code run in a bubblewrap sandbox.
+of Computing's Slurm cluster. About 110 L40 GPU-hours have been used. We estimate that the plan above needs
+about 200 more: 10 for the pilot, 40 to develop the white-box objective, 40 for MATH and
+code, 100 for the curriculum comparison over three seeds, and 10 for the external check.
+At two GPUs this is roughly four days of continuous running, so compute is not the binding
+constraint. A white-box provider must score the student's fresh responses in every round,
+so its responses can no longer be cached; a 7B provider fits beside the student on one GPU.
 
-\paragraph{Risks.} The main risk is that differences between providers stay below what the
-design can detect even with more seeds. That outcome would itself answer the research
-question for this setting: price, not provider identity, decides value. The second risk is
-that learning stays confined to Countdown, which would narrow the claims to one domain. The
-third is GPU contention on the shared server, which the queue handles by waiting for idle
-GPUs.
+\paragraph{Risks.} The main risk is that learning stays confined to Countdown under the new
+objective, which would leave the curriculum only one domain worth choosing and narrow the
+claims. The second is that, without a budget, every reasonable curriculum reaches the same
+accuracy and differs only in speed; learning curves are the headline metric for that
+reason. The third is that the three Qwen providers are too alike for the choice between
+them to matter, in which case we would add a provider of another family through a
+text-only reward.

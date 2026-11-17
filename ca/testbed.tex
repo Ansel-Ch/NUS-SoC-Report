@@ -1,0 +1,141 @@
+\chapter{Testbed and Selectors}
+\label{ca:chap:testbed}
+
+\section{Experimental Setup}
+\label{ca:sec:setup}
+
+\paragraph{Domains.} We use three domains whose answers a program can check: three-number
+Countdown puzzles \autocite{patino_gold_2025}, MATH problems at difficulty levels 3 to 5
+\autocite{hendrycks_math_2021}, and Python function-writing problems from KodCode
+\autocite{xu_kodcode_2025}, kept only if their reference solution passes its tests in our
+sandbox. Each domain has a 2,000-prompt training pool, a 500-prompt selection set that
+feeds the selector, and a 500-prompt test set used only for final results. Generated code
+runs in a bubblewrap sandbox with no network and a read-only file system.
+
+\paragraph{Student.} The student is Qwen2.5-1.5B-Instruct \autocite{qwen_qwen25_2024},
+trained through a rank-16 LoRA adapter \autocite{hu_lora_2022}. Before training it scores
+0.208 on Countdown, 0.474 on MATH and 0.396 on code on the selection set.
+
+\paragraph{Providers.} Nine open models were screened on 200 prompts per domain and five
+were kept (Table~\ref{ca:tab:pool}). They run locally but are reached only through a text
+interface, so black-box access is enforced rather than assumed. The pool has a strong and
+expensive model, a mid-priced generalist, a code specialist, a cheap model the student can
+catch up with, and a cheap model from a second family, which separates any effect of
+sharing the student's family from an effect of price. A sixth provider is a copy of Phi-4
+at the same price whose answers are corrupted on 30\% of prompts.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}llrccc@{}}
+\toprule
+ & & & \multicolumn{3}{c}{\textbf{Ceiling $\mu_{k,d}$}} \\
+\cmidrule(l){4-6}
+\textbf{Provider} & \textbf{Size} & \textbf{Price $c_k$} & \textbf{Countdown} &
+  \textbf{MATH} & \textbf{Code} \\
+\midrule
+Phi-4 \autocite{abdin_phi4_2024}                 & 14.7B & 2.92 & 0.874 & 0.804 & 0.686 \\
+Qwen2.5-7B \autocite{qwen_qwen25_2024}           & 7.6B  & 1.00 & 0.810 & 0.750 & 0.580 \\
+Qwen2.5-Coder-7B \autocite{hui_qwen25coder_2024} & 7.6B  & 0.98 & 0.620 & 0.678 & 0.612 \\
+Qwen2.5-3B \autocite{qwen_qwen25_2024}           & 3.1B  & 0.50 & 0.538 & 0.690 & 0.462 \\
+Phi-4-mini \autocite{microsoft_phi4mini_2025}    & 3.8B  & 0.84 & 0.616 & 0.618 & 0.558 \\
+Phi-4, degraded                                  & 14.7B & 2.92 & 0.614 & 0.532 & 0.492 \\
+\bottomrule
+\end{tabular}
+\caption{The strongest provider is also the most expensive. Price is GPU time per response
+relative to Qwen2.5-7B; the ceiling is the accuracy of the provider's most common answer
+over its four cached responses on the selection set.}
+\label{ca:tab:pool}
+\end{table}
+
+\paragraph{Prices and cache.} A provider's price is the GPU time it needs to produce one
+response, relative to Qwen2.5-7B, measured during screening and fixed before training.
+Long-winded providers therefore cost more, as under per-token pricing. Each provider
+answered every pool and selection prompt four times, once; runs read these cached answers,
+which makes them reproducible and the measurements of Section~\ref{ca:sec:branching}
+affordable.
+
+\paragraph{Training and evaluation.} Every run has a budget of $B = 2{,}400$ price units
+and a cap of 400 rounds. The selector chooses an arm once per block of 10 rounds, after
+which the student is evaluated greedily on 256 selection prompts per domain. Final students
+are evaluated on all 1,500 test problems. Every condition is run with three seeds, and
+intervals are 95\% bootstrap intervals over seeds and test items.
+
+\section{Selectors}
+\label{ca:sec:selectors}
+
+\paragraph{Headroom with learned efficiency (ours).} The selector scores each arm by how
+far the student is below the provider's ceiling, scaled by a learned estimate of how much
+accuracy that headroom buys, and divided by price:
+\[
+  \hat{v}(k, d) = \max\big(\hat{g}_{k,d},\, 0\big) \cdot
+                  \frac{\max\big(\mu_{k,d} - \alpha_d,\ 0.05\big)}{c_k},
+\]
+where $\alpha_d$ is the student's current selection accuracy on domain $d$. The efficiency
+$\hat{g}_{k,d}$ is the realised accuracy gain per round per unit of headroom, pooled per
+domain, shrunk towards the domain's estimate and discounted by 0.95 per block, so that a
+domain where no provider produces progress is learned to be unproductive for all of them at
+once. With probability 0.1 the selector plays a random arm instead, so every arm keeps
+being observed.
+
+\paragraph{Cost-aware Thompson sampling.} A model-free comparison that keeps a discounted
+Gaussian posterior over each arm's gain per round and plays the arm with the largest
+sampled gain divided by price \autocite{xia_budgeted_ts_2015,raj_dts_2017}.
+
+\paragraph{Reference policies.} Uniform allocation over all 18 arms; each real provider
+alone, with domains in rotation; a control trained on ground-truth correctness with no
+provider and no cost for 200 rounds, which shows what providers add beyond the labels; and
+supervised fine-tuning (SFT) on provider responses bought with the same budget, which shows
+what learning on-policy adds.
+
+\section{Measuring Marginal Value}
+\label{ca:sec:branching}
+
+We measure $v(k, d; \theta)$ directly by branching. The uniform run of each seed saves
+checkpoints at 25, 50 and 75\% of its budget, and the untrained student serves as the 0\%
+checkpoint. From each checkpoint, a branch trains on a single arm for 20 rounds and is then
+evaluated on the full selection set; marginal value is the change in mean selection
+accuracy divided by the budget the branch spent. With 6 providers, 3 domains, 4 checkpoints
+and 3 seeds this gives 216 branches. Branches from the same checkpoint and seed share the
+adapter, the prompt order and the sampling seeds, so comparisons between providers are
+paired.
+
+\section{Design Decisions}
+\label{ca:sec:decisions}
+
+Table~\ref{ca:tab:decisions} lists the choices that most shape the results, the
+alternatives we considered, and the evidence behind each choice.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.7cm}
+                >{\raggedright\arraybackslash}p{3.9cm}
+                >{\raggedright\arraybackslash}p{8.3cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Alternatives} & \textbf{Reason for the choice} \\
+\midrule
+Black-box agreement reward & Logit-based on-policy distillation across tokenizers &
+  Cross-tokenizer distillation recovered 0.14 of the teacher gap against 0.66 with a shared
+  tokenizer, and its hybrid variant collapsed (Takeaway~\ref{ca:tk:blackbox}). \\
+Normalised vote share & Most-common-answer indicator; raw vote share; rubric with a verifier &
+  Carried as much learning signal as ground truth on MATH and code in screening, kept signal
+  on Countdown where providers often give invalid answers, and needs no extra model. \\
+Ceiling as provider quality & Single-response accuracy; agreement with other providers &
+  It is where the reward points the student. Agreement with peers was label-free but
+  favoured the Qwen family, which made up most of the pool. \\
+Countdown (3 numbers), MATH 3--5, KodCode & GSM8K; MBPP; 4-number Countdown &
+  GSM8K was saturated (all large providers scored 94--97\%), MBPP had too few problems, and
+  the student solved 0.8\% of 4-number puzzles, leaving almost no gradient. \\
+Price = GPU time per response & Parameter count; hosted API prices &
+  Measured on our hardware and fixed before training, and captures verbosity: one candidate
+  repeated itself until the length limit. \\
+Corrupt whole prompts in the degraded provider & Corrupt each response independently &
+  Independent corruption at 30\% lowered the ceiling by only 8\%, because the majority
+  usually survives; per-prompt corruption lowers it by 30\%. \\
+\bottomrule
+\end{tabular}
+\caption{Main design decisions and their evidence.}
+\label{ca:tab:decisions}
+\end{table}
